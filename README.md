@@ -38,8 +38,9 @@ Agent mode. Tool calling. Streaming. Vision. Thinking blocks. Built‑in 429 ret
 
 ```
 1. Cmd+Shift+P → "Copilot Adapter Kit: Set API Key" → pick "openai" → paste sk-...
-2. Cmd+Shift+I → Copilot Chat → pick "GPT-4o" from the model dropdown
-3. Chat. Done.
+2. Click **$(cak-icon) CAK** in the status bar → configure providers, models & keys
+3. Cmd+Shift+I → Copilot Chat → pick "GPT-5.5" from the model dropdown
+4. Chat. Done.
 ```
 
 ---
@@ -52,7 +53,7 @@ Agent mode. Tool calling. Streaming. Vision. Thinking blocks. Built‑in 429 ret
   - [LM Studio](#lm-studio)
   - [Any OpenAI‑Compatible Provider](#any-openai-compatible-provider)
   - [Multiple Providers at Once](#multiple-providers-at-once)
-- [Custom Models](#-custom-models)
+- [Manage Models](#-manage-models)
 - [Architecture](#-architecture)
 - [Settings Reference](#-settings-reference)
 - [Commands Reference](#-commands-reference)
@@ -94,10 +95,10 @@ Cmd+Shift+P → "Copilot Adapter Kit: Set API Key" → pick "openai" → paste s
 ```
 
 **What you get:**
-- GPT-4o and GPT-4o Mini in the Copilot picker (built‑in)
+- GPT-5.5, GPT-5.4, GPT-5.4-mini, GPT-5.4-nano, and Codex 5.3 in the Copilot picker (built‑in)
 - Vision (paste screenshots into chat)
 - Tool calling (Agent mode)
-- 128 tool limit, 128k input
+- 128 tool limit, up to 1M context
 
 ---
 
@@ -279,7 +280,7 @@ All providers can coexist. Each model's `"family"` field determines which engine
     "deepseek": { "baseUrl": "https://api.deepseek.com/v1" }
   },
   "copilot-adapter-kit.models": [
-    { "id": "gpt-4o",        "name": "GPT-4o",           "family": "openai" },
+    { "id": "gpt-5.5",       "name": "GPT-5.5",          "family": "openai" },
     { "id": "llama3-8b",     "name": "Llama 3.1 8B",     "family": "ollama" },
     { "id": "qwen-coder",    "name": "Qwen 2.5 Coder",   "family": "lmstudio" },
     { "id": "llama3-70b",    "name": "Llama 3.1 70B",    "family": "groq" },
@@ -292,7 +293,7 @@ Each family gets its own API key. Run `Set API Key` once per provider.
 
 ---
 
-## 🧩 Custom Models
+## 🧩 Manage Models
 
 The `copilot-adapter-kit.models` setting defines what appears in the Copilot Chat model picker.
 
@@ -308,6 +309,7 @@ The `copilot-adapter-kit.models` setting defines what appears in the Copilot Cha
 | `image` | — | Whether the model supports images (vision). Default `true`. |
 | `thinking` | — | Whether the model emits reasoning/thinking tokens. Default `false`. |
 | `toolCalling` | — | Max parallel tool calls. Default `128`. |
+| `apiPath` | — | Per‑model API path override (e.g. `/responses`). Falls back to provider default. |
 
 **Built‑in models** (always available):
 
@@ -319,7 +321,7 @@ The `copilot-adapter-kit.models` setting defines what appears in the Copilot Cha
 | `gpt-5.4-nano` | openai | 400k in, 128k out, vision, 128 tools |
 | `codex-5.3` | openai | 1M in, 128k out, vision, thinking, 128 tools |
 
-Your `models` array is **merged** with the built‑ins. If you define a model with the same `id`, yours takes priority — useful for pinning a specific GPT-4o version.
+Your `models` array is **merged** with the built‑ins. If you define a model with the same `id`, yours takes priority — useful for pinning a specific model version.
 
 ---
 
@@ -394,7 +396,7 @@ Each key under `providers` is a **family name**. It must match the `family` fiel
 
 ### `copilot-adapter-kit.models`
 
-Array of custom model definitions. Merged with built‑ins. See [Custom Models](#-custom-models) for the full schema.
+Array of custom model definitions. Merged with built‑ins. See [Manage Models](#-manage-models) for the full schema.
 
 ### `copilot-adapter-kit.maxTokens`
 
@@ -498,6 +500,12 @@ At `logLevel: dump`:
 ---
 
 ## 👨‍💻 Developer Guide
+
+```bash
+nvm use 22             # Requires Node ≥22
+npm install            # Install dependencies
+npm run watch          # Compile in watch mode
+```
 
 ### Project Structure
 
@@ -723,21 +731,30 @@ MIT © [salilvnair](https://github.com/salilvnair)
 
 ```bash
 npm run compile          # Build TypeScript → out/
-npm run logo             # Generate icon font (optional)
+npm run logo             # Generate icon font from resources/cak-icon-src.svg
 npm run package          # Create .vsix file
 ```
 
-### Manual upload to VS Code Marketplace
+### Quick publish
+
+```bash
+npm run publish          # Publish to marketplace
+npm run publish:patch    # Auto‑bump patch version + publish
+npm run publish:minor    # Auto‑bump minor version + publish
+```
+
+### Manual upload
 
 1. Go to [marketplace.visualstudio.com/manage](https://marketplace.visualstudio.com/manage)
-2. Click **New Extension** → upload the `.vsix` file
-3. Or use the CLI: `npx @vscode/vsce publish`
+2. Click **New Extension** → upload the `.vsix`
 
 ### Prerequisites
 
-- `package.json` has `"publisher": "salilvnair"` — matches your marketplace publisher ID
-- `icon.png` in `resources/` is used as the extension icon
-- `.vscodeignore` excludes `src/`, `node_modules/`, etc. from the package
+- Node ≥22 (use `nvm use 22`)
+- `"publisher": "salilvnair"` matches marketplace publisher ID
+- `resources/icon.png` — extension icon (also used in panel header)
+- `resources/cak-icons.woff` — custom icon font for status bar `$(cak-icon)`
+- `.vscodeignore` excludes `src/`, `node_modules/`, etc.
 
 | Provider | Family | `baseUrl` |
 |---|---|---|
