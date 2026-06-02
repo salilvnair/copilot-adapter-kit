@@ -3,7 +3,7 @@
   "displayName": "Copilot Adapter Kit",
   "description": "Plugin-based provider mesh for Copilot Chat. BYOK, zero config.",
   "icon": "resources/icon.png",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "salilvnair",
   "license": "MIT",
   "author": "salilvnair",
