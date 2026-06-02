@@ -1,0 +1,39 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <g
+    fill="none"
+    stroke="currentColor"
+    stroke-width="6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <!-- outer bot shell -->
+    <path d="
+      M53 13
+      C44 13 36 16 30 22
+      C22 28 17 38 16 50
+      C10 53 7 59 7 67
+      V77
+      C7 87 14 94 24 95
+      C29 108 43 116 64 116
+      C85 116 99 108 104 95
+      C114 94 121 87 121 77
+      V67
+      C121 59 118 53 112 50
+      C111 38 106 28 98 22
+      C92 16 84 13 75 13
+      H70
+      V22
+      C70 26 67 29 64 29
+      C61 29 58 26 58 22
+      V13
+      Z
+    "/>
+
+    <!-- face panel outline only -->
+    <rect x="27" y="40" width="74" height="43" rx="17"/>
+  </g>
+
+  <!-- 2 dot eyes inside face panel -->
+  <circle cx="50" cy="61.5" r="4.5" fill="currentColor"/>
+  <circle cx="78" cy="61.5" r="4.5" fill="currentColor"/>
+</svg>

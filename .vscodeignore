@@ -1,0 +1,14 @@
+.vscode/**
+node_modules/**
+src/**
+scripts/**
+.git/**
+.gitignore
+.github/**
+*.md
+!README.md
+!CHANGELOG.md
+tsconfig.json
+vscode.proposed.*
+.DS_Store
+*.log

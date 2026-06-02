@@ -1,0 +1,232 @@
+{
+  "name": "copilot-adapter-kit",
+  "displayName": "Copilot Adapter Kit",
+  "description": "Plugin-based provider mesh for Copilot Chat. BYOK, zero config.",
+  "icon": "resources/icon.png",
+  "version": "0.1.0",
+  "publisher": "salilvnair",
+  "license": "MIT",
+  "author": "salilvnair",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/salilvnair/copilot-adapter-kit.git"
+  },
+  "engines": {
+    "vscode": "^1.116.0",
+    "node": ">=24"
+  },
+  "categories": [
+    "AI",
+    "Chat"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/entry.js",
+  "contributes": {
+    "icons": {
+      "cak-icon": {
+        "description": "Copilot Adapter Kit",
+        "default": {
+          "fontPath": "resources/cak-icons.woff",
+          "fontCharacter": "\\E001"
+        }
+      }
+    },
+    "languageModelChatProviders": [
+      {
+        "vendor": "copilot-adapter-kit",
+        "displayName": "Copilot Adapter Kit"
+      }
+    ],
+    "commands": [
+      {
+        "command": "copilot-adapter-kit.openPanel",
+        "title": "%copilot-adapter-kit.command.openPanel%"
+      },
+      {
+        "command": "copilot-adapter-kit.setApiKey",
+        "title": "%copilot-adapter-kit.command.setApiKey%"
+      },
+      {
+        "command": "copilot-adapter-kit.clearApiKey",
+        "title": "%copilot-adapter-kit.command.clearApiKey%"
+      },
+      {
+        "command": "copilot-adapter-kit.addModel",
+        "title": "%copilot-adapter-kit.command.addModel%"
+      },
+      {
+        "command": "copilot-adapter-kit.removeModel",
+        "title": "%copilot-adapter-kit.command.removeModel%"
+      },
+      {
+        "command": "copilot-adapter-kit.addProvider",
+        "title": "%copilot-adapter-kit.command.addProvider%"
+      },
+      {
+        "command": "copilot-adapter-kit.removeProvider",
+        "title": "%copilot-adapter-kit.command.removeProvider%"
+      },
+      {
+        "command": "copilot-adapter-kit.configure",
+        "title": "%copilot-adapter-kit.command.configure%"
+      },
+      {
+        "command": "copilot-adapter-kit.openSettings",
+        "title": "%copilot-adapter-kit.command.openSettings%"
+      },
+      {
+        "command": "copilot-adapter-kit.showLogs",
+        "title": "%copilot-adapter-kit.command.showLogs%"
+      },
+      {
+        "command": "copilot-adapter-kit.openDumps",
+        "title": "%copilot-adapter-kit.command.openDumps%"
+      }
+    ],
+    "configuration": {
+      "title": "%copilot-adapter-kit.config.title%",
+      "properties": {
+        "copilot-adapter-kit.providers": {
+          "type": "object",
+          "default": {
+            "openai": {
+              "baseUrl": "https://api.openai.com/v1",
+              "modelAlias": {}
+            }
+          },
+          "description": "%copilot-adapter-kit.config.providers%",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "baseUrl": {
+                "type": "string",
+                "description": "API endpoint for this provider."
+              },
+              "defaultApiPath": {
+                "type": "string",
+                "description": "Default API path (e.g. /chat/completions, /responses). Default: /chat/completions."
+              },
+              "modelApiPaths": {
+                "type": "object",
+                "description": "Per-model API path overrides. Key = model ID, value = path (e.g. /responses for codex).",
+                "additionalProperties": true
+              },
+              "modelAlias": {
+                "type": "object",
+                "description": "Map picker model IDs → provider model names.",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "copilot-adapter-kit.maxTokens": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "%copilot-adapter-kit.config.maxTokens%"
+        },
+        "copilot-adapter-kit.models": {
+          "type": "array",
+          "default": [],
+          "description": "%copilot-adapter-kit.config.models%",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "family"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "family": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              },
+              "maxIn": {
+                "type": "number"
+              },
+              "maxOut": {
+                "type": "number"
+              },
+              "image": {
+                "type": "boolean"
+              },
+              "thinking": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "copilot-adapter-kit.showBuiltinModels": {
+          "type": "boolean",
+          "default": true,
+          "description": "%copilot-adapter-kit.config.showBuiltinModels%"
+        },
+        "copilot-adapter-kit.hiddenBuiltins": {
+          "type": "array",
+          "default": [],
+          "description": "%copilot-adapter-kit.config.hiddenBuiltins%"
+        },
+        "copilot-adapter-kit.modelOverrides": {
+          "type": "object",
+          "default": {},
+          "description": "%copilot-adapter-kit.config.modelOverrides%"
+        },
+        "copilot-adapter-kit.hiddenCustomModels": {
+          "type": "array",
+          "default": [],
+          "description": "%copilot-adapter-kit.config.hiddenCustomModels%"
+        },
+        "copilot-adapter-kit.stabilizeTools": {
+          "type": "boolean",
+          "default": false,
+          "description": "%copilot-adapter-kit.config.stabilizeTools%",
+          "tags": [
+            "experimental"
+          ]
+        },
+        "copilot-adapter-kit.logLevel": {
+          "type": "string",
+          "default": "quiet",
+          "enum": [
+            "quiet",
+            "meta",
+            "dump"
+          ],
+          "description": "%copilot-adapter-kit.config.logLevel%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('out',{recursive:true,force:true})\"",
+    "compile": "npm run clean && tsc -p ./",
+    "watch": "npm run clean && tsc -watch -p ./",
+    "logo": "node scripts/generate-icon-font.js",
+    "package": "npx @vscode/vsce package",
+    "publish": "npx @vscode/vsce publish",
+    "publish:patch": "npx @vscode/vsce publish patch",
+    "publish:minor": "npx @vscode/vsce publish minor",
+    "publish:major": "npx @vscode/vsce publish major"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/vscode": "^1.116.0",
+    "@vscode/vsce": "^3.9.1",
+    "svg2ttf": "^6.1.0",
+    "svgicons2svgfont": "^16.0.0",
+    "ttf2woff": "^3.0.0",
+    "typescript": "^6.0.3"
+  }
+}
