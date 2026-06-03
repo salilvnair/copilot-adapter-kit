@@ -38,8 +38,8 @@ Agent mode. Tool calling. Streaming. Vision. Thinking blocks. Built‑in 429 ret
 
 ```
 1. Cmd+Shift+P → "Copilot Adapter Kit: Set API Key" → pick "openai" → paste sk-...
-2. Click **$(cak-icon) CAK** in the status bar → configure providers, models & keys
-3. Cmd+Shift+I → Copilot Chat → pick "GPT-5.5" from the model dropdown
+2. Click **$(cak-icon) CAK** in the status bar → Add Provider (family: openai, name: My OpenAI, URL) → Add Model (id, name, family: openai)
+3. Cmd+Shift+I → Copilot Chat → pick your model from the dropdown
 4. Chat. Done.
 ```
 
@@ -81,10 +81,8 @@ The default family. Uses the OpenAI Chat Completions API over SSE streaming.
 {
   "copilot-adapter-kit.providers": {
     "openai": {
-      "baseUrl": "https://api.openai.com/v1",
-      "modelAlias": {
-        "gpt-4o": "gpt-4o-2024-08-06"
-      }
+      "name": "My OpenAI",
+      "baseUrl": "https://api.openai.com/v1"
     }
   }
 }
@@ -95,10 +93,11 @@ Cmd+Shift+P → "Copilot Adapter Kit: Set API Key" → pick "openai" → paste s
 ```
 
 **What you get:**
-- GPT-5.5, GPT-5.4, GPT-5.4-mini, GPT-5.4-nano, and Codex 5.3 in the Copilot picker (built‑in)
+- Add your own models via the Panel UI or `copilot-adapter-kit.models` setting
 - Vision (paste screenshots into chat)
 - Tool calling (Agent mode)
 - 128 tool limit, up to 1M context
+- All models are user‑defined — no built‑ins, full control
 
 ---
 
@@ -295,33 +294,21 @@ Each family gets its own API key. Run `Set API Key` once per provider.
 
 ## 🧩 Manage Models
 
-The `copilot-adapter-kit.models` setting defines what appears in the Copilot Chat model picker.
+There are **no built‑in models**. All models are user‑defined — add them via the Panel UI or JSON.
+
+The **Model ID** is the exact name sent to the API (e.g. `gpt-5.2`, `llama3-70b`). The **Name** is the display label in the picker.
 
 | Field | Required | Description |
 |---|---|---|
-| `id` | ✅ | Unique picker ID. This is what you select in Copilot Chat. |
-| `family` | ✅ | Which provider engine handles this model (`openai`, `ollama`, `groq`, etc.). |
+| `id` | ✅ | Exact API model name sent to the provider |
+| `family` | ✅ | Provider family (`openai`, `ollama`, `groq`, etc.) |
 | `name` | — | Display name in the picker. Defaults to `id`. |
-| `version` | — | Model version string. Defaults to `"custom"`. |
-| `detail` | — | Description shown below the model name. |
 | `maxIn` | — | Max input tokens. Default `128000`. |
 | `maxOut` | — | Max output tokens. Default `16384`. |
-| `image` | — | Whether the model supports images (vision). Default `true`. |
-| `thinking` | — | Whether the model emits reasoning/thinking tokens. Default `false`. |
+| `image` | — | Vision/image support. Default `true`. |
+| `thinking` | — | Reasoning token support. Default `false`. |
 | `toolCalling` | — | Max parallel tool calls. Default `128`. |
 | `apiPath` | — | Per‑model API path override (e.g. `/responses`). Falls back to provider default. |
-
-**Built‑in models** (always available):
-
-| Picker ID | Provider | Features |
-|---|---|---|
-| `gpt-5.5` | openai | 1M in, 128k out, vision, thinking, 128 tools |
-| `gpt-5.4` | openai | 1M in, 128k out, vision, thinking, 128 tools |
-| `gpt-5.4-mini` | openai | 400k in, 128k out, vision, 128 tools |
-| `gpt-5.4-nano` | openai | 400k in, 128k out, vision, 128 tools |
-| `codex-5.3` | openai | 1M in, 128k out, vision, thinking, 128 tools |
-
-Your `models` array is **merged** with the built‑ins. If you define a model with the same `id`, yours takes priority — useful for pinning a specific model version.
 
 ---
 
@@ -391,12 +378,14 @@ All settings are under the `copilot-adapter-kit` prefix.
 
 Each key under `providers` is a **family name**. It must match the `family` field in your model definitions and the engine registered in `ProviderDiscovery`.
 
-- `baseUrl` — The API endpoint **without** `/chat/completions` (appended automatically).
-- `modelAlias` — Maps picker model IDs to the actual model name sent to the API. Useful when your provider uses a different naming scheme.
+- `baseUrl` — The API endpoint (e.g. `https://api.openai.com/v1`).
+- `name` — Friendly display name (shown as label with family as colored chip).
+- `defaultApiPath` — Default API path. Default: `/chat/completions`.
+- `modelApiPaths` — Per‑model path overrides (e.g. `{"codex-5.3": "/responses"}`).
 
 ### `copilot-adapter-kit.models`
 
-Array of custom model definitions. Merged with built‑ins. See [Manage Models](#-manage-models) for the full schema.
+Array of custom model definitions. See [Manage Models](#-manage-models) for the full schema.
 
 ### `copilot-adapter-kit.maxTokens`
 
@@ -425,14 +414,9 @@ View dumps: `Cmd+Shift+P → "Copilot Adapter Kit: Open Dumps Folder"`.
 
 ⚠️ **Experimental.** Pre‑activates VS Code tool activators to lock the tools array across conversation turns. Helps maintain cache prefix stability. If you see "tool list is unstable" warnings, enable this.
 
-### `copilot-adapter-kit.showBuiltinModels`
+### `copilot-adapter-kit.hiddenCustomModels`
 
-```jsonc
-{ "copilot-adapter-kit.showBuiltinModels": true }   // Default: show built-in models
-{ "copilot-adapter-kit.showBuiltinModels": false }  // Hide built-ins, only show your models
-```
-
-Toggle whether the built‑in OpenAI model catalog (GPT-5.5, GPT-5.4, GPT-5.4-mini, GPT-5.4-nano, Codex 5.3) appears in the Copilot picker. Set to `false` to only show models from your `copilot-adapter-kit.models` list — keeps the picker clean when you only use local/third‑party providers.
+Managed automatically by the Panel UI when you hide custom models. No JSON editing needed.
 
 ---
 
@@ -440,12 +424,12 @@ Toggle whether the built‑in OpenAI model catalog (GPT-5.5, GPT-5.4, GPT-5.4-mi
 
 | Command | ID | Description |
 |---|---|---|
-| **Open Panel** | `copilot-adapter-kit.openPanel` | 🎨 Beautiful form UI — all settings in one place |
+| **Open Panel** | `copilot-adapter-kit.openPanel` | 🎨 Form UI — providers, models, keys, config, danger zone |
 | **Configure** | `copilot-adapter-kit.configure` | QuickPick wizard — max tokens, log level, etc. |
-| **Add Provider** | `copilot-adapter-kit.addProvider` | Step‑by‑step form to add a new provider |
-| **Remove Provider** | `copilot-adapter-kit.removeProvider` | Pick a provider to remove |
-| **Add Model** | `copilot-adapter-kit.addModel` | 8‑step form to add a custom model |
-| **Remove Model** | `copilot-adapter-kit.removeModel` | Pick a custom model to remove |
+| **Add Provider** | `copilot-adapter-kit.addProvider` | Step‑by‑step form — family, friendly name, base URL |
+| **Remove Provider** | `copilot-adapter-kit.removeProvider` | Cascade deletes provider + all its models + keys |
+| **Add Model** | `copilot-adapter-kit.addModel` | 8‑step form with dropdowns — id, name, family, context, vision, thinking, tools |
+| **Remove Model** | `copilot-adapter-kit.removeModel` | Pick a model to remove |
 | **Set API Key** | `copilot-adapter-kit.setApiKey` | Store per‑provider API key in OS keychain |
 | **Clear API Key** | `copilot-adapter-kit.clearApiKey` | Remove a provider's API key |
 | **Open Settings** | `copilot-adapter-kit.openSettings` | Jump to raw JSON settings editor |

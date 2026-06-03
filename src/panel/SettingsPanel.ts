@@ -82,6 +82,12 @@ export class SettingsPanel {
         case 'openDumps':
           vscode.commands.executeCommand('copilot-adapter-kit.openDumps');
           break;
+        case 'deleteAll':
+          await this._deleteAll();
+          break;
+        case 'factoryReset':
+          await this._factoryReset();
+          break;
       }
     });
   }
@@ -111,7 +117,6 @@ export class SettingsPanel {
     const maxTokens = config.get<number>('maxTokens', 0);
     const logLevel = config.get<string>('logLevel', 'quiet');
     const stabilizeTools = config.get<boolean>('stabilizeTools', false);
-    const showBuiltinModels = config.get<boolean>('showBuiltinModels', true);
     const hiddenBuiltins: string[] = config.get<string[]>('hiddenBuiltins') || [];
     const modelOverrides: Record<string, any> = config.get<Record<string, any>>('modelOverrides') || {};
     const hiddenCustomModels: string[] = config.get<string[]>('hiddenCustomModels') || [];
@@ -134,8 +139,9 @@ export class SettingsPanel {
     this.panel.webview.postMessage({
       type: 'state',
       payload: {
-        providers, models, maxTokens, logLevel, stabilizeTools, showBuiltinModels, hiddenBuiltins, hiddenCustomModels, modelOverrides, keys,
+        providers, models, maxTokens, logLevel, stabilizeTools, hiddenBuiltins, hiddenCustomModels, modelOverrides, keys,
         builtinModels,
+        engineFamilies: ['openai'], // only families with registered engines
       },
     });
   }
@@ -160,7 +166,7 @@ export class SettingsPanel {
 
   private async _saveProvider(family: string, providerConfig: any): Promise<void> {
     const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
-    const providers = config.get<Record<string, any>>('providers') || {};
+    const providers = { ...(config.get<Record<string, any>>('providers') || {}) };
     providers[family] = providerConfig;
     await config.update('providers', providers, vscode.ConfigurationTarget.Global);
     await this._sendState();
@@ -168,9 +174,23 @@ export class SettingsPanel {
 
   private async _removeProvider(family: string): Promise<void> {
     const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
-    const providers = config.get<Record<string, any>>('providers') || {};
-    delete providers[family];
-    await config.update('providers', providers, vscode.ConfigurationTarget.Global);
+
+    // VS Code merges objects on update — set key to undefined to actually delete it
+    await config.update('providers', { [family]: undefined }, vscode.ConfigurationTarget.Global);
+
+    // Cascade: remove all models for this family
+    const models = (config.get<any[]>('models') || []) as any[];
+    const filtered = models.filter((m: any) => m?.family !== family);
+    await config.update('models', filtered, vscode.ConfigurationTarget.Global);
+
+    // Cascade: remove the API key
+    try { await this.ext.secrets.delete(`copilot-adapter-kit.apiKey.${family}`); } catch { /* ok */ }
+
+    // Cascade: clean hiddenCustomModels entries for this family
+    const hiddenCustom: string[] = config.get<string[]>('hiddenCustomModels') || [];
+    const cleaned = hiddenCustom.filter(k => !k.startsWith(`${family}:`));
+    await config.update('hiddenCustomModels', cleaned, vscode.ConfigurationTarget.Global);
+
     await this._sendState();
   }
 
@@ -242,5 +262,27 @@ export class SettingsPanel {
       await config.update('models', existing, vscode.ConfigurationTarget.Global);
     }
     await this._sendState();
+  }
+
+  private async _deleteAll(): Promise<void> {
+    const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
+    const providers = config.get<Record<string, any>>('providers') || {};
+    for (const fam of Object.keys(providers)) {
+      try { await this.ext.secrets.delete(`copilot-adapter-kit.apiKey.${fam}`); } catch { /* ok */ }
+    }
+    await config.update('providers', undefined, vscode.ConfigurationTarget.Global);
+    await config.update('models', undefined, vscode.ConfigurationTarget.Global);
+    await config.update('maxTokens', undefined, vscode.ConfigurationTarget.Global);
+    await config.update('logLevel', undefined, vscode.ConfigurationTarget.Global);
+    await config.update('stabilizeTools', undefined, vscode.ConfigurationTarget.Global);
+    await config.update('hiddenBuiltins', undefined, vscode.ConfigurationTarget.Global);
+    await config.update('hiddenCustomModels', undefined, vscode.ConfigurationTarget.Global);
+    await config.update('modelOverrides', undefined, vscode.ConfigurationTarget.Global);
+    await this._sendState();
+    vscode.window.showInformationMessage('🗑 All data deleted.');
+  }
+
+  private async _factoryReset(): Promise<void> {
+    await this._deleteAll();
   }
 }

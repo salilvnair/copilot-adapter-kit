@@ -18,10 +18,11 @@ export class OpenAIEngine implements Engine {
 
   async stream(req: Payload, sink: StreamEvents, signal?: AbortSignal): Promise<void> {
     const apiPath = req.apiPath || '/chat/completions';
+    const { apiPath: _, ...bodyReq } = req;
     const res = await fetch(`${this.baseUrl}${apiPath}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({ ...req, stream_options: { include_usage: true } }),
+      body: JSON.stringify({ ...bodyReq, stream_options: { include_usage: true } }),
       signal,
     });
 

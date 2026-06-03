@@ -1,6 +1,7 @@
 import vscode from 'vscode';
 
 export interface ProviderConfig {
+  name?: string;
   baseUrl: string;
   defaultApiPath?: string;
   modelApiPaths?: Record<string, string>;
@@ -38,11 +39,6 @@ export class Tuning {
 
   get stabilizeTools(): boolean {
     return this.cfg().get<boolean>('stabilizeTools', false);
-  }
-
-  /** Show built-in models in the Copilot picker. Default true. */
-  get showBuiltinModels(): boolean {
-    return this.cfg().get<boolean>('showBuiltinModels', true);
   }
 
   /** Resolves the actual model ID to send to the provider API. */

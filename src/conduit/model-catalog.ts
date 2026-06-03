@@ -14,15 +14,8 @@ export interface ModelMeta {
   apiPath?: string;
 }
 
-/** Built-in models per provider family. Add entries here when adding new engines. */
-export const BUILTIN_CATALOG: ModelMeta[] = [
-  // ---- OpenAI (current as of 2026-06) ----
-  { id: 'gpt-5.5',       name: 'GPT-5.5',         family: 'openai', version: 'gpt-5.5',       detail: 'Flagship — coding & complex reasoning',  maxIn: 1000000, maxOut: 128000, image: true, thinking: true,  toolCalling: 128 },
-  { id: 'gpt-5.4',       name: 'GPT-5.4',         family: 'openai', version: 'gpt-5.4',       detail: 'Balanced price/performance',              maxIn: 1000000, maxOut: 128000, image: true, thinking: true,  toolCalling: 128 },
-  { id: 'gpt-5.4-mini',  name: 'GPT-5.4 Mini',    family: 'openai', version: 'gpt-5.4-mini',  detail: 'Fast, affordable — best mini model',       maxIn: 400000,  maxOut: 128000, image: true, thinking: false, toolCalling: 128 },
-  { id: 'gpt-5.4-nano',  name: 'GPT-5.4 Nano',    family: 'openai', version: 'gpt-5.4-nano',  detail: 'Lowest latency & cost',                    maxIn: 400000,  maxOut: 128000, image: true, thinking: false, toolCalling: 128 },
-  { id: 'gpt-5.3-codex', name: 'GPT-5.3-Codex',   family: 'openai', version: 'gpt-5.3-codex', apiPath: '/responses', detail: 'Agentic coding — Responses API only',      maxIn: 400000, maxOut: 128000, image: true, thinking: true,  toolCalling: 128 },
-];
+/** Built-in models per provider family. Empty by design — users add their own via the Panel UI or copilot-adapter-kit.models setting. */
+export const BUILTIN_CATALOG: ModelMeta[] = [];
 
 /** User-supplied models via copilot-adapter-kit.models setting. */
 function loadUserModels(): ModelMeta[] {
@@ -49,17 +42,10 @@ function loadUserModels(): ModelMeta[] {
   } catch { return []; }
 }
 
-export function resolveCatalog(showBuiltinModels = true): ModelMeta[] {
+export function resolveCatalog(): ModelMeta[] {
   const userModels = loadUserModels();
   const hiddenCustom: string[] = vscode.workspace.getConfiguration('copilot-adapter-kit').get<string[]>('hiddenCustomModels') || [];
-  const visibleCustom = userModels.filter(m => !hiddenCustom.includes(`${m.family}:${m.id}`));
-  if (!showBuiltinModels) return visibleCustom;
-  const hidden: string[] = vscode.workspace.getConfiguration('copilot-adapter-kit').get<string[]>('hiddenBuiltins') || [];
-  const overrides: Record<string, any> = vscode.workspace.getConfiguration('copilot-adapter-kit').get<Record<string, any>>('modelOverrides') || {};
-  const mergedBuiltins = BUILTIN_CATALOG
-    .filter(m => !hidden.includes(m.id))
-    .map(m => overrides[m.id] ? { ...m, ...overrides[m.id] } : m);
-  return [...mergedBuiltins, ...visibleCustom];
+  return userModels.filter(m => !hiddenCustom.includes(`${m.family}:${m.id}`));
 }
 
 export function metaToVscode(meta: ModelMeta, hasKey: boolean): vscode.LanguageModelChatInformation {

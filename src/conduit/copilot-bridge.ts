@@ -19,7 +19,7 @@ export class CopilotBridge implements vscode.LanguageModelChatProvider {
   async provideLanguageModelChatInformation(): Promise<vscode.LanguageModelChatInformation[]> {
     if (!this.alive) return [];
     const ready = await this.ctx.vault.present();
-    return resolveCatalog(this.ctx.tuning.showBuiltinModels).map(m => metaToVscode(m, ready));
+    return resolveCatalog().map(m => metaToVscode(m, ready));
   }
 
   async provideLanguageModelChatResponse(
@@ -29,7 +29,7 @@ export class CopilotBridge implements vscode.LanguageModelChatProvider {
     progress: vscode.Progress<vscode.LanguageModelResponsePart>,
     token: vscode.CancellationToken,
   ): Promise<void> {
-    const meta = resolveCatalog(this.ctx.tuning.showBuiltinModels).find(m => m.id === info.id);
+    const meta = resolveCatalog().find(m => m.id === info.id);
     const family = meta?.family ?? 'openai';
 
     // Resolve per‑family credentials

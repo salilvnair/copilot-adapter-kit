@@ -136,6 +136,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="sidebar-section" style="margin-top:4px">Tools</div>
 <div class="sidebar-tab" data-tab="json"><span class="tab-icon">{ }</span>JSON Settings</div>
 <div class="sidebar-tab" data-tab="dumps"><span class="tab-icon">📂</span>Request Dumps</div>
+<div class="sidebar-section" style="margin-top:8px">Danger</div>
+<div class="sidebar-tab" data-tab="danger"><span class="tab-icon">⚠️</span>Danger Zone</div>
 </div>
 <div class="content" id="content"></div>
 <div class="toast hidden" id="toast"></div>
@@ -143,7 +145,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 <script>
 const vsc=acquireVsCodeApi();
-let st={providers:{},models:[],builtinModels:[],maxTokens:0,logLevel:'quiet',stabilizeTools:false,showBuiltinModels:true,hiddenBuiltins:[],hiddenCustomModels:[],keys:{}};
+let st={providers:{},models:[],builtinModels:[],maxTokens:0,logLevel:'quiet',stabilizeTools:false,hiddenBuiltins:[],hiddenCustomModels:[],keys:{}};
 let active='providers';
 
 // SVG icons — exact Daakia paths (24x24 viewBox, rendered at 14px)
@@ -154,6 +156,7 @@ function iEyeOff(){return`<svg class="icon-svg" style="stroke:var(--color-text-m
 function iGear(){return`<svg class="icon-svg" style="stroke:var(--color-text-secondary);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`}
 function iGlobe(){return`<svg class="icon-svg" style="stroke:var(--color-text-secondary);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`}
 function iPlus(){return`<svg class="icon-svg" style="stroke:var(--color-text-primary);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`}
+function iFolder(){return`<svg class="icon-svg" style="stroke:var(--color-info);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`}
 function iCak(size){const s=size||32;return`<svg width="${s}" height="${s}" viewBox="0 0 128 128"><rect width="128" height="128" rx="24" fill="none"/><polygon points="64,20 102,42 102,86 64,108 26,86 26,42" fill="none" stroke="#6366f1" stroke-width="4" stroke-linejoin="round"/><polygon points="64,38 90,52 90,80 64,94 38,80 38,52" fill="none" stroke="#818cf8" stroke-width="3.5" stroke-linejoin="round"/><circle cx="64" cy="20" r="4" fill="#a78bfa"/><circle cx="102" cy="42" r="4" fill="#6366f1"/><circle cx="102" cy="86" r="4" fill="#00cec9"/><circle cx="64" cy="108" r="4" fill="#55efc4"/><circle cx="26" cy="86" r="4" fill="#6366f1"/><circle cx="26" cy="42" r="4" fill="#a78bfa"/><circle cx="64" cy="64" r="5" fill="#d4d4d4"/><circle cx="64" cy="64" r="2.5" fill="#1e1e1e"/></svg>`}
 
 document.getElementById('sidebar').addEventListener('click',e=>{
@@ -164,7 +167,7 @@ document.getElementById('sidebar').addEventListener('click',e=>{
 
 function render(){
   const c=document.getElementById('content');
-  switch(active){case'providers':c.innerHTML=rProv();break;case'models':c.innerHTML=rMod();break;case'keys':c.innerHTML=rKeys();break;case'config':c.innerHTML=rCfg();break;case'json':c.innerHTML=rJson();break;case'dumps':c.innerHTML=rDmp();}
+  switch(active){case'providers':c.innerHTML=rProv();break;case'models':c.innerHTML=rMod();break;case'keys':c.innerHTML=rKeys();break;case'config':c.innerHTML=rCfg();break;case'json':c.innerHTML=rJson();break;case'dumps':c.innerHTML=`<div class="content-title">📂 Request Dumps</div><div class="content-subtitle">Payloads saved when log level = dump</div><div><button class="btn btn-ghost" onclick="vsc.postMessage({type:'openDumps'})">${iFolder()} Open Dumps Folder</button></div><div style="margin-top:12px;color:var(--color-text-muted);font-size:12px">Set log level to "dump" in Configuration tab.</div>`;break;case'danger':c.innerHTML=rDanger();}
   updBadges();rebindDD();
 }
 
@@ -172,7 +175,7 @@ function render(){
 function rProv(){
   const e=Object.entries(st.providers);
   const cards=e.map(([f,cfg])=>`<div class="provider-card">
-    <div class="provider-info"><div class="provider-name">${esc(f)}${st.keys[f]?' <span class="badge badge-success">🔑 key set</span>':' <span class="badge badge-warning">no key</span>'}</div><div class="provider-url">${esc(cfg.baseUrl||'')}</div></div>
+    <div class="provider-info"><div class="provider-name"><span class="badge badge-primary" style="margin-right:6px">${esc(f)}</span>${esc(cfg.name||f)}${st.keys[f]?' <span class="badge badge-success">🔑 key set</span>':' <span class="badge badge-warning">no key</span>'}</div><div class="provider-url">${esc(cfg.baseUrl||'')}</div></div>
     <div class="provider-actions">
       <button class="btn btn-sm btn-ghost btn-icon" title="Edit" onclick="edProv('${esc(f)}')">${iEdit()}</button>
       <button class="btn btn-sm btn-danger btn-icon" title="Remove" onclick="rmProv('${esc(f)}')">${iTrash()}</button>
@@ -180,22 +183,21 @@ function rProv(){
   return`<div class="content-title">🌐 Providers</div><div class="content-subtitle">${e.length} configured</div>
     ${cards||'<div style="color:var(--color-text-muted);padding:12px 0">No providers yet.</div>'}
     <div class="card"><div class="card-header">➕ Add Provider</div>
-    <div class="form-row"><div class="form-group"><label class="form-label">Family</label><input class="form-input sm" id="pfF" placeholder="ollama,groq..."></div><div class="form-group" style="flex:2"><label class="form-label">Base URL</label><input class="form-input sm" id="pfU" placeholder="https://api.example.com/v1"></div></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Family</label><div class="dropdown-wrap" id="ddProvFamily"></div></div><div class="form-group"><label class="form-label">Provider Name</label><input class="form-input sm" id="pfName" placeholder="My OpenAI"></div><div class="form-group" style="flex:2"><label class="form-label">Base URL</label><input class="form-input sm" id="pfU" placeholder="https://api.example.com/v1"></div></div>
     <div class="form-group"><label class="form-label">Aliases (pickId=apiName, ...)</label><input class="form-input sm" id="pfA" placeholder="gpt-4o=gpt-4o-2024-08-06"></div>
     <button class="btn btn-primary btn-sm" onclick="addProv()">${iPlus()} Add</button></div>`;
 }
-function addProv(){const f=gid('pfF').value.trim(),u=gid('pfU').value.trim(),a=gid('pfA').value.trim();if(!f||!u)return toast('❌ Family & URL required');const ma={};if(a)a.split(',').forEach(p=>{const[k,...v]=p.trim().split('=');if(k&&v.length)ma[k.trim()]=v.join('=').trim()});vsc.postMessage({type:'saveProvider',payload:{family:f,config:{baseUrl:u,modelAlias:ma}}});gid('pfF').value='';gid('pfU').value='';gid('pfA').value=''}
-function edProv(f){const c=st.providers[f]||{};gid('pfF').value=f;gid('pfU').value=c.baseUrl||'';gid('pfA').value=c.modelAlias?Object.entries(c.modelAlias).map(([k,v])=>`${k}=${v}`).join(', '):'';document.querySelector('.content').scrollTop=9999}
-function rmProv(f){vsc.postMessage({type:'removeProvider',payload:{family:f}})}
 
 // --- Manage Models ---
 let modelFilter = '';
 function rMod(){
   const hs=new Set(st.hiddenBuiltins||[]);
-  const filter = modelFilter || Object.keys(st.providers)[0] || 'openai';
+  const provKeys = Object.keys(st.providers);
+  if (!provKeys.length) return `<div class="content-title">🧩 Manage Models</div><div class="content-subtitle">No providers configured. Add one in the Providers tab first.</div>`;
+  const filter = modelFilter || provKeys[0];
 
-  const blt=(st.builtinModels||[]).filter(m=>!filter||m.family===filter).map(m=>{const hid=!st.showBuiltinModels||hs.has(m.id);const ap=m.apiPath||'/chat/completions';const apCls=ap==='/responses'?'badge badge-purple':'badge badge-muted';return`<div class="model-row${hid?' disabled':''}">
-    <div class="model-info"><span class="model-name">${esc(m.name)} <span class="model-builtin-badge">built‑in</span></span><span class="model-family">${esc(m.family)}</span>
+  const blt=(st.builtinModels||[]).filter(m=>!filter||m.family===filter).map(m=>{const hid=hs.has(m.id);const ap=m.apiPath||'/chat/completions';const apCls=ap==='/responses'?'badge badge-purple':'badge badge-muted';const pname=(st.providers[m.family]||{}).name||m.family;return`<div class="model-row${hid?' disabled':''}">
+    <div class="model-info"><span class="model-name">${esc(m.name)} <span class="model-builtin-badge">built‑in</span></span><span class="badge badge-primary">${esc(m.family)}</span><span class="model-family">${esc(pname)}</span>
       <span class="${apCls}">${ap}</span>
       <span class="badge badge-primary">${(m.maxIn/1000)|0}K→${(m.maxOut/1000)|0}K</span>${m.image?'<span class="badge badge-info">vision</span>':''}${m.thinking?'<span class="badge badge-purple">thinking</span>':''}<span class="badge badge-muted">🔧 ${m.toolCalling}</span></div>
     <div class="model-actions">
@@ -203,7 +205,7 @@ function rMod(){
       <button class="btn btn-sm btn-ghost btn-icon" title="${hid?'Show':'Hide'}" onclick="togBlt('${esc(m.id)}')">${hid?iEyeOff():iEye()}</button>
       <button class="btn btn-sm btn-danger btn-icon" title="Delete" onclick="delBlt('${esc(m.id)}')">${iTrash()}</button>
     </div></div>`}).join('');
-  const cust=(st.models||[]).filter(m=>!filter||m.family===filter).map(m=>{const hid=(st.hiddenCustomModels||[]).includes(m.family+':'+m.id);const ap=m.apiPath||'/chat/completions';const apCls=ap==='/responses'?'badge badge-purple':'badge badge-muted';return`<div class="model-row${hid?' disabled':''}"><div class="model-info"><span class="model-name">${esc(m.name||m.id)}</span><span class="model-family">${esc(m.family)}</span>
+  const cust=(st.models||[]).filter(m=>!filter||m.family===filter).map(m=>{const hid=(st.hiddenCustomModels||[]).includes(m.family+':'+m.id);const ap=m.apiPath||'/chat/completions';const apCls=ap==='/responses'?'badge badge-purple':'badge badge-muted';const pname=(st.providers[m.family]||{}).name||m.family;return`<div class="model-row${hid?' disabled':''}"><div class="model-info"><span class="model-name">${esc(m.name||m.id)}</span><span class="badge badge-primary">${esc(m.family)}</span><span class="model-family">${esc(pname)}</span>
       <span class="${apCls}">${ap}</span>
       <span class="badge badge-primary">${(m.maxIn/1000)|0}K→${(m.maxOut/1000)|0}K</span>${m.image?'<span class="badge badge-info">vision</span>':''}${m.thinking?'<span class="badge badge-purple">thinking</span>':''}${m.toolCalling?`<span class="badge badge-muted">🔧 ${m.toolCalling}</span>`:''}</div>
     <div class="model-actions">
@@ -212,7 +214,7 @@ function rMod(){
       <button class="btn btn-sm btn-danger btn-icon" title="Delete" onclick="rmMod('${esc(m.id)}','${esc(m.family)}')">${iTrash()}</button>
     </div></div>`}).join('');
   return`<div class="content-title">🧩 Manage Models</div>
-    <div class="inline-row" style="justify-content:space-between;align-items:center"><div class="content-subtitle" style="margin-top:0">${(st.builtinModels||[]).length} built‑in + ${(st.models||[]).length} custom</div>
+    <div class="inline-row" style="justify-content:space-between;align-items:center"><div class="content-subtitle" style="margin-top:0">${(st.models||[]).length} model(s)</div>
       <div class="inline-row" style="gap:8px;align-items:center"><span style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em">${iGlobe()} Provider</span><div class="dropdown-wrap" id="ddModelFilter" style="min-width:140px"></div></div></div>
     ${blt}${cust}${!blt&&!cust?'<div style="color:var(--color-text-muted);padding:12px 0">No models for this provider.</div>':''}
     <div class="card"><div class="card-header">➕ Add Model</div>
@@ -276,13 +278,13 @@ function rKeys(){
   const rows = entries.map(([f,cfg])=>{
     const hk=st.keys[f];
     return`<div class="provider-card">
-      <div class="provider-info"><div class="provider-name">${esc(f)}</div><div class="provider-url">${esc(cfg.baseUrl||'')}</div></div>
+      <div class="provider-info"><div class="provider-name"><span class="badge badge-primary" style="margin-right:6px">${esc(f)}</span>${esc(cfg.name||f)}${hk?' <span class="badge badge-success">🔑 key set</span>':' <span class="badge badge-warning">no key</span>'}</div><div class="provider-url">${esc(cfg.baseUrl||'')}</div></div>
       ${hk?`<span class="badge badge-success">✅ Saved to ${/win/i.test(navigator.platform||'')?'Credential Manager':'Keychain'}</span><button class="btn btn-sm btn-danger btn-icon" title="Remove" onclick="clrKey('${esc(f)}')">${iTrash()}</button>`
         :`<span class="badge badge-warning">⚠ No key</span>`}
     </div>`}).join('');
 
-  const provOpts = entries.map(([f])=>({v:f,l:f}));
-  if (!provOpts.length) provOpts.push({v:'openai',l:'openai'});
+  const provOpts = entries.map(([f])=>({v:f,l:(st.providers[f]||{}).name||f}));
+  if (!provOpts.length) return `<div class="content-title">🔑 API Keys</div><div class="content-subtitle">No providers configured.</div>`;
 
   return`<div class="content-title">🔑 API Keys</div>
     <div class="content-subtitle">Keys are stored securely in your OS keychain — never in settings.json</div>
@@ -298,12 +300,13 @@ function rKeys(){
 }
 
 function addKey(){
-  const f = ddKeyProv ? ddKeyProv.value : 'openai';
+    if (!ddKeyProv) return toast('❌ No providers configured');
+    const f = ddKeyProv.value;
   const k = gid('keyInput').value.trim();
   if(!k) return toast('❌ Key cannot be empty');
   vsc.postMessage({type:'setApiKey',payload:{family:f,key:k}});
   gid('keyInput').value = '';
-  toast('✅ Key saved for '+f);
+  toast('✅ Key saved for ' + ((st.providers[f]||{}).name||f));
 }
 function clrKey(f){vsc.postMessage({type:'clearApiKey',payload:{family:f}})}
 
@@ -312,13 +315,24 @@ function rCfg(){return`<div class="content-title">⚙️ Configuration</div><div
   <div class="card"><div class="card-header">Max Output Tokens</div><div class="inline-row"><input class="form-input sm" id="cfgMaxT" value="${st.maxTokens||''}" placeholder="0 = unlimited" style="width:160px"><button class="btn btn-sm btn-primary" onclick="svCfg('maxTokens',+gid('cfgMaxT').value||0)">💾 Save</button></div></div>
   <div class="card"><div class="card-header">Log Level</div><div class="dropdown-wrap" id="ddLog"></div></div>
   <div class="card"><div class="card-header">Tool Stabilization <span class="badge badge-warning">experimental</span></div><div class="checkbox-wrap" id="cbStab"><div class="checkbox-box"><svg class="checkbox-icon" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3"/></svg></div><span class="checkbox-label">Pre‑activate tools for cache stability</span></div></div>
-  <div class="card"><div class="card-header">Show Built‑in Models</div><div class="checkbox-wrap" id="cbShoBl"><div class="checkbox-box"><svg class="checkbox-icon" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3"/></svg></div><span class="checkbox-label">Show GPT‑5.x & Codex in Copilot picker</span></div></div>`;
+`;
 }
 function svCfg(k,v){vsc.postMessage({type:'saveConfig',payload:{key:k,value:v}});toast('✅ Saved')}
 
 // --- JSON & Dumps ---
 function rJson(){return`<div class="content-title">{ } JSON Settings</div><div class="content-subtitle">Raw settings.json editor for advanced users</div><div><button class="btn btn-ghost" onclick="vsc.postMessage({type:'openSettings'})">${iGear()} Open settings.json</button></div><div style="margin-top:12px;color:var(--color-text-muted);font-size:12px">Form changes write to the same JSON keys.</div>`}
 function rDmp(){return`<div class="content-title">📂 Request Dumps</div><div class="content-subtitle">Payloads saved when log level = dump</div><div><button class="btn btn-ghost" onclick="vsc.postMessage({type:'openDumps'})">${iFolder()} Open Dumps Folder</button></div><div style="margin-top:12px;color:var(--color-text-muted);font-size:12px">Set log level to "dump" in Configuration tab.</div>`}
+function rDanger(){return`<div class="content-title" style="color:var(--color-error)">⚠️ Danger Zone</div><div class="content-subtitle">These actions cannot be undone. Proceed with caution.</div>
+  <div class="card" style="border-color:rgba(239,68,68,.3)">
+    <div class="card-header" style="color:var(--color-error)">🗑 Delete All</div>
+    <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">Removes every provider, every model, every API key, and all configuration. The extension will be as if freshly installed — except settings.json keys are cleared rather than deleted.</div>
+    <button class="btn btn-danger" onclick="confirmModal('⚠️ Delete EVERYTHING?','All providers, models, keys, and settings will be permanently removed. This CANNOT be undone.',()=>{vsc.postMessage({type:'deleteAll'});toast('🗑 Everything deleted')})">${iTrash('#fff')} Delete All</button>
+  </div>
+  <div class="card" style="border-color:rgba(239,68,68,.3);margin-top:16px">
+    <div class="card-header" style="color:var(--color-warning)">🏭 Factory Default</div>
+    <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">Resets all settings to their default values. Providers, models, keys — all cleared. Same state as installing the extension for the first time.</div>
+    <button class="btn btn-danger" onclick="confirmModal('⚠️ Factory Reset?','All data will be wiped. The extension will be as if freshly installed. This CANNOT be undone.',()=>{vsc.postMessage({type:'factoryReset'});toast('🏭 Factory reset complete')})">🏭 Factory Reset</button>
+  </div>`}
 
 // --- Dropdown System ---
 window._ddReg = {};
@@ -379,10 +393,14 @@ function rebindDD() {
     d.innerHTML = '';
     if (d._inst) { d._inst.close(); delete d._inst; }
   });
+  if (active === 'providers') {
+    const engFams = (st.engineFamilies || ['openai']);
+    ddProvFamily = ddMake('ddProvFamily', engFams.map(f=>({v:f,l:f})), engFams[0]);
+  }
   if (active === 'models') {
     const fams = Object.keys(st.providers); if (!fams.length) fams.push('openai');
-    // Provider filter dropdown — only actual providers, no "All"
-    ddMake('ddModelFilter', fams.map(f=>({v:f,l:f})), modelFilter || fams[0], function(v){modelFilter=v;render();});
+    const famLabels = fams.map(f => ({ v: f, l: (st.providers[f]||{}).name || f }));
+    ddMake('ddModelFilter', famLabels, modelFilter || fams[0], function(v){modelFilter=v;render();});
     dF = ddMake('ddMF', fams.map(f => ({ v: f, l: f })), fams[0]);
     dC = ddMake('ddMC', [{ v: '4096', l: '4K' }, { v: '8192', l: '8K' }, { v: '16384', l: '16K' }, { v: '32768', l: '32K' }, { v: '65536', l: '64K' }, { v: '128000', l: '128K' }, { v: '200000', l: '200K' }, { v: '400000', l: '400K' }, { v: '1000000', l: '1M' }], '128000');
     dO = ddMake('ddMO', [{ v: '4096', l: '4K' }, { v: '8192', l: '8K' }, { v: '16384', l: '16K' }, { v: '32768', l: '32K' }, { v: '65536', l: '64K' }, { v: '128000', l: '128K' }], '16384');
@@ -398,19 +416,21 @@ function rebindDD() {
     cs.el.addEventListener('click', function() {
       vsc.postMessage({ type: 'saveConfig', payload: { key: 'stabilizeTools', value: cs.checked } }); toast('✅ Stabilize: ' + (cs.checked ? 'ON' : 'OFF'));
     });
-    const cb = bindCb('cbShoBl', st.showBuiltinModels);
-    cb.el.addEventListener('click', function() {
-      vsc.postMessage({ type: 'saveConfig', payload: { key: 'showBuiltinModels', value: cb.checked } }); toast('✅ Built‑ins: ' + (cb.checked ? 'SHOWN' : 'HIDDEN'));
-    });
   }
   if (active === 'keys') {
-    const fams = Object.keys(st.providers); if (!fams.length) fams.push('openai');
-    ddKeyProv = ddMake('ddKeyProv', fams.map(f => ({ v: f, l: f })), fams[0]);
+    const fams = Object.keys(st.providers); if (!fams.length) return;
+    ddKeyProv = ddMake('ddKeyProv', fams.map(f => ({ v: f, l: (st.providers[f]||{}).name || f })), fams[0]);
   }
 }
 
 // --- Checkbox ---
 function bindCb(id,init){const el=document.getElementById(id);if(!el)return{checked:false,el};let c=!!init;const lbl=el.querySelector('.checkbox-label')?.outerHTML||'';function rf(){el.innerHTML=`<div class="checkbox-box${c?' checked':''}"><svg class="checkbox-icon" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3"/></svg></div>${lbl}`}el.addEventListener('click',e=>{if(e.target.closest('.checkbox-box')){c=!c;rf()}});el._cb={get checked(){return c},set checked(v){c=v;rf()},el,refresh:rf};rf();return el._cb}
+
+// --- Provider actions ---
+function addProv(){const f=ddProvFamily?ddProvFamily.value:'';const nm=gid('pfName').value.trim();const u=gid('pfU').value.trim(),a=gid('pfA').value.trim();if(!f||!u)return toast('❌ Family & URL required');const ma={};if(a)a.split(',').forEach(p=>{const[k,...v]=p.trim().split('=');if(k&&v.length)ma[k.trim()]=v.join('=').trim()});vsc.postMessage({type:'saveProvider',payload:{family:f,config:{name:nm||f,baseUrl:u,modelAlias:ma}}});gid('pfName').value='';gid('pfU').value='';gid('pfA').value='';toast('✅ Provider added');resetProvBtn()}
+function edProv(f){const c=st.providers[f]||{};if(ddProvFamily)ddProvFamily.value=f;gid('pfName').value=c.name||'';gid('pfU').value=c.baseUrl||'';gid('pfA').value=c.modelAlias?Object.entries(c.modelAlias).map(([k,v])=>`${k}=${v}`).join(', '):'';const btn=document.querySelector('#content button.btn-primary');if(btn){btn.innerHTML=iEdit()+' Update Provider';btn.onclick=function(){const fam=ddProvFamily?ddProvFamily.value:'';const nm=gid('pfName').value.trim();const url=gid('pfU').value.trim(),ali=gid('pfA').value.trim();if(!fam||!url)return toast('❌ Family & URL required');const ma={};if(ali)ali.split(',').forEach(p=>{const[k,...v]=p.trim().split('=');if(k&&v.length)ma[k.trim()]=v.join('=').trim()});vsc.postMessage({type:'saveProvider',payload:{family:fam,config:{name:nm||fam,baseUrl:url,modelAlias:ma}}});gid('pfName').value='';gid('pfU').value='';gid('pfA').value='';toast('✅ Provider updated');resetProvBtn()}}document.querySelector('.content').scrollTop=9999}
+function resetProvBtn(){const btn=document.querySelector('#content button.btn-primary');if(btn){btn.innerHTML=iPlus()+' Add';btn.onclick=addProv};gid('pfName').value='';gid('pfU').value='';gid('pfA').value=''}
+function rmProv(f){const nm=(st.providers[f]||{}).name||f;const mc=(st.models||[]).filter(m=>m.family===f).length;const hk=st.keys[f];const w=[];if(mc)w.push(mc+' model(s)');if(hk)w.push('API key');const body=w.length?'⚠️ Also deletes: '+w.join(' and ')+'. Cannot be undone.':'Cannot be undone.';confirmModal('Delete '+nm+'?',body,()=>{vsc.postMessage({type:'removeProvider',payload:{family:f}});toast('🗑 Deleted')})}
 
 // --- Helpers ---
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.remove('hidden');setTimeout(()=>t.classList.add('hidden'),2200)}
@@ -421,7 +441,7 @@ function confirmModal(title,body,onOk){
   document.getElementById('modalOk').onclick=()=>{ov.remove();onOk();};
   ov.addEventListener('click',e=>{if(e.target===ov)ov.remove()});
 }
-function updBadges(){document.getElementById('provCount').textContent=Object.keys(st.providers).length;document.getElementById('modelCount').textContent=(st.builtinModels||[]).length+(st.models||[]).length}
+function updBadges(){document.getElementById('provCount').textContent=Object.keys(st.providers).length;document.getElementById('modelCount').textContent=(st.models||[]).length}
 function gid(id){return document.getElementById(id)}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')}
 

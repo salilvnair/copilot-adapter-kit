@@ -16,7 +16,7 @@
   "copilot-adapter-kit.config.stabilizeTools": "Experimental: lock tool configurations to improve cache hit rates. Pre-activates all available VS Code tools so the tools array stays identical across turns — each subsequent request reuses cached context. \n\n⚠️ Requests include more function definitions — input tokens increase. Cached tokens are cheaper but still count toward usage. \n\n- 64 or fewer enabled tools: usually stable — leave this off. \n- More than 128 tools: not supported. Disable unused tools. \n- May inject internal activation calls into chat history. Start a new chat if switching models behaves unexpectedly. \n\nUse Configure Tools (workbench.action.chat.configureTools) to manage your tool list.",
   "copilot-adapter-kit.config.logLevel": "quiet = token counts | meta = hashes + cache trace | dump = full request payloads",
   "copilot-adapter-kit.config.models": "Add custom models. Each entry needs id and family. Matches providers by family name.",
-  "copilot-adapter-kit.config.showBuiltinModels": "Show the built-in OpenAI model catalog in the Copilot picker. Disable this to only show models from your copilot-adapter-kit.models list.",
+
   "copilot-adapter-kit.config.hiddenBuiltins": "Specific built-in model IDs to hide from the picker. Use the Open Panel UI to manage this visually.",
   "copilot-adapter-kit.config.modelOverrides": "Per-model overrides (name, maxIn, maxOut, etc.) for built-in models. Managed via the panel UI."
 }

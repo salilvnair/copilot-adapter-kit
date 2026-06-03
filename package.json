@@ -3,7 +3,7 @@
   "displayName": "Copilot Adapter Kit",
   "description": "Plugin-based provider mesh for Copilot Chat. BYOK, zero config.",
   "icon": "resources/icon.png",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "publisher": "salilvnair",
   "license": "MIT",
   "author": "salilvnair",
@@ -90,12 +90,7 @@
       "properties": {
         "copilot-adapter-kit.providers": {
           "type": "object",
-          "default": {
-            "openai": {
-              "baseUrl": "https://api.openai.com/v1",
-              "modelAlias": {}
-            }
-          },
+          "default": {},
           "description": "%copilot-adapter-kit.config.providers%",
           "additionalProperties": {
             "type": "object",
@@ -167,11 +162,6 @@
               }
             }
           }
-        },
-        "copilot-adapter-kit.showBuiltinModels": {
-          "type": "boolean",
-          "default": true,
-          "description": "%copilot-adapter-kit.config.showBuiltinModels%"
         },
         "copilot-adapter-kit.hiddenBuiltins": {
           "type": "array",

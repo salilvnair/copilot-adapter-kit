@@ -66,16 +66,26 @@ export class DiagTracer implements Interceptor {
 
     sink.onComplete = () => {
       ch().info(`[req ${hash}] ok ${Date.now() - start}ms`);
+      if (config.get<string>('logLevel') === 'dump') {
+        this._writeDump(hash, { response: 'ok', elapsedMs: Date.now() - start }).catch(() => {});
+      }
       origComplete();
     };
     sink.onFault = async (e: Error) => {
       ch().error(`[req ${hash}] fault [${(e as any).status ?? '?'}] ${e.message}`);
+      if (config.get<string>('logLevel') === 'dump') {
+        this._writeDump(hash, {
+          error: { message: e.message, status: (e as any).status, code: (e as any).code, raw: (e as any).raw, stack: e.stack },
+          elapsedMs: Date.now() - start,
+        }).catch(() => {});
+      }
       await origFault(e);
     };
 
     const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
     if (config.get<string>('logLevel') === 'dump') {
-      this._writeDump(hash, payload).catch(() => {});
+      const dumpData: any = { payload, tools: payload.tools };
+      this._writeDump(hash, dumpData).catch(() => {});
     }
 
     await next();
@@ -89,15 +99,26 @@ export class DiagTracer implements Interceptor {
     return this.dumpRoot;
   }
 
-  private async _writeDump(hash: string, payload: any): Promise<void> {
+  private async _writeDump(hash: string, data: any): Promise<void> {
     const root = await this._ensureDumpRoot();
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
     const file = join(root, `req-${ts}-${hash}.json`);
-    await writeFile(file, JSON.stringify(payload, null, 2), 'utf-8');
-    const sysMsg = payload.messages?.[0];
+    await writeFile(file, JSON.stringify(data, null, 2), 'utf-8');
+    // Write system prompt separately if this is a request dump
+    const sysMsg = data.payload?.messages?.[0];
     if (sysMsg?.content) {
       const sysFile = join(root, `req-${ts}-${hash}.sys.txt`);
       await writeFile(sysFile, typeof sysMsg.content === 'string' ? sysMsg.content : JSON.stringify(sysMsg.content), 'utf-8');
+    }
+    // Write tools separately if present
+    if (data.tools?.length) {
+      const toolsFile = join(root, `req-${ts}-${hash}.tools.json`);
+      await writeFile(toolsFile, JSON.stringify(data.tools, null, 2), 'utf-8');
+    }
+    // Write error separately if present
+    if (data.error) {
+      const errFile = join(root, `req-${ts}-${hash}.error.json`);
+      await writeFile(errFile, JSON.stringify(data.error, null, 2), 'utf-8');
     }
   }
 }
