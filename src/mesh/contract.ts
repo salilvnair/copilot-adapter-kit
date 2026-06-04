@@ -6,6 +6,7 @@ export interface Payload {
   messages: Envelope[];
   tools?: ToolDef[]; tool_choice?: 'none'|'auto'|'required';
   apiPath?: string;
+  _visionFallback?: { model: string; family: string };
 }
 
 export interface Envelope {

@@ -159,6 +159,9 @@
               },
               "thinking": {
                 "type": "boolean"
+              },
+              "pricing": {
+                "type": "string"
               }
             }
           }
@@ -195,6 +198,26 @@
             "dump"
           ],
           "description": "%copilot-adapter-kit.config.logLevel%"
+        },
+        "copilot-adapter-kit.visionFallbackModel": {
+          "type": "string",
+          "default": "",
+          "description": "%copilot-adapter-kit.config.visionFallbackModel%"
+        },
+        "copilot-adapter-kit.visionFallbackAlways": {
+          "type": "boolean",
+          "default": false,
+          "description": "%copilot-adapter-kit.config.visionFallbackAlways%"
+        },
+        "copilot-adapter-kit.systemPrompt": {
+          "type": "string",
+          "default": "",
+          "description": "%copilot-adapter-kit.config.systemPrompt%"
+        },
+        "copilot-adapter-kit.userPromptTemplate": {
+          "type": "string",
+          "default": "",
+          "description": "%copilot-adapter-kit.config.userPromptTemplate%"
         }
       }
     }

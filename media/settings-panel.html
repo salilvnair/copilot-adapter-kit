@@ -61,6 +61,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .dropdown-item{padding:8px 12px;font-size:12.5px;cursor:pointer;transition:background 100ms;color:var(--color-text-secondary)}
 .dropdown-item:hover{background:rgba(99,102,241,.08);color:#e5e7eb}
 .dropdown-item.selected{color:var(--color-primary);font-weight:600}
+.dropdown-group-header{padding:6px 12px 2px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-muted);pointer-events:none;border-top:1px solid rgba(255,255,255,.04);margin-top:2px}
+.dropdown-group-header:first-child{border-top:none;margin-top:0}
 
 .checkbox-wrap{display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;user-select:none}
 .checkbox-box{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--color-input-border);display:flex;align-items:center;justify-content:center;transition:all 140ms;flex-shrink:0}
@@ -145,7 +147,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 <script>
 const vsc=acquireVsCodeApi();
-let st={providers:{},models:[],builtinModels:[],maxTokens:0,logLevel:'quiet',stabilizeTools:false,hiddenBuiltins:[],hiddenCustomModels:[],keys:{}};
+let st={providers:{},models:[],builtinModels:[],copilotModels:[],maxTokens:0,logLevel:'quiet',stabilizeTools:false,hiddenBuiltins:[],hiddenCustomModels:[],keys:{},visionFallbackModel:'',visionFallbackAlways:false,systemPrompt:'',userPromptTemplate:''};
 let active='providers';
 
 // SVG icons — exact Daakia paths (24x24 viewBox, rendered at 14px)
@@ -167,7 +169,7 @@ document.getElementById('sidebar').addEventListener('click',e=>{
 
 function render(){
   const c=document.getElementById('content');
-  switch(active){case'providers':c.innerHTML=rProv();break;case'models':c.innerHTML=rMod();break;case'keys':c.innerHTML=rKeys();break;case'config':c.innerHTML=rCfg();break;case'json':c.innerHTML=rJson();break;case'dumps':c.innerHTML=`<div class="content-title">📂 Request Dumps</div><div class="content-subtitle">Payloads saved when log level = dump</div><div><button class="btn btn-ghost" onclick="vsc.postMessage({type:'openDumps'})">${iFolder()} Open Dumps Folder</button></div><div style="margin-top:12px;color:var(--color-text-muted);font-size:12px">Set log level to "dump" in Configuration tab.</div>`;break;case'danger':c.innerHTML=rDanger();}
+  switch(active){case'providers':c.innerHTML=rProv();break;case'models':c.innerHTML=rMod();break;case'keys':c.innerHTML=rKeys();break;case'config':c.innerHTML=rCfg();break;case'json':c.innerHTML=rJson();break;case'dumps':c.innerHTML=rDmp();break;case'danger':c.innerHTML=rDanger();}
   updBadges();rebindDD();
 }
 
@@ -199,7 +201,7 @@ function rMod(){
   const blt=(st.builtinModels||[]).filter(m=>!filter||m.family===filter).map(m=>{const hid=hs.has(m.id);const ap=m.apiPath||'/chat/completions';const apCls=ap==='/responses'?'badge badge-purple':'badge badge-muted';const pname=(st.providers[m.family]||{}).name||m.family;return`<div class="model-row${hid?' disabled':''}">
     <div class="model-info"><span class="model-name">${esc(m.name)} <span class="model-builtin-badge">built‑in</span></span><span class="badge badge-primary">${esc(m.family)}</span><span class="model-family">${esc(pname)}</span>
       <span class="${apCls}">${ap}</span>
-      <span class="badge badge-primary">${(m.maxIn/1000)|0}K→${(m.maxOut/1000)|0}K</span>${m.image?'<span class="badge badge-info">vision</span>':''}${m.thinking?'<span class="badge badge-purple">thinking</span>':''}<span class="badge badge-muted">🔧 ${m.toolCalling}</span></div>
+      <span class="badge badge-primary">${(m.maxIn/1000)|0}K→${(m.maxOut/1000)|0}K</span>${m.image?'<span class="badge badge-info">vision</span>':''}${m.visionFallback?`<span class="badge badge-accent">🔁 ${esc(m.visionFallback)}</span>`:''}${m.thinking?'<span class="badge badge-purple">thinking</span>':''}<span class="badge badge-muted">🔧 ${m.toolCalling}</span>${m.pricing?`<span class="badge badge-success">💰 ${esc(m.pricing)}</span>`:''}</div>
     <div class="model-actions">
       <button class="btn btn-sm btn-ghost btn-icon" title="Edit" onclick="edBlt('${esc(m.id)}')">${iEdit()}</button>
       <button class="btn btn-sm btn-ghost btn-icon" title="${hid?'Show':'Hide'}" onclick="togBlt('${esc(m.id)}')">${hid?iEyeOff():iEye()}</button>
@@ -207,7 +209,7 @@ function rMod(){
     </div></div>`}).join('');
   const cust=(st.models||[]).filter(m=>!filter||m.family===filter).map(m=>{const hid=(st.hiddenCustomModels||[]).includes(m.family+':'+m.id);const ap=m.apiPath||'/chat/completions';const apCls=ap==='/responses'?'badge badge-purple':'badge badge-muted';const pname=(st.providers[m.family]||{}).name||m.family;return`<div class="model-row${hid?' disabled':''}"><div class="model-info"><span class="model-name">${esc(m.name||m.id)}</span><span class="badge badge-primary">${esc(m.family)}</span><span class="model-family">${esc(pname)}</span>
       <span class="${apCls}">${ap}</span>
-      <span class="badge badge-primary">${(m.maxIn/1000)|0}K→${(m.maxOut/1000)|0}K</span>${m.image?'<span class="badge badge-info">vision</span>':''}${m.thinking?'<span class="badge badge-purple">thinking</span>':''}${m.toolCalling?`<span class="badge badge-muted">🔧 ${m.toolCalling}</span>`:''}</div>
+      <span class="badge badge-primary">${(m.maxIn/1000)|0}K→${(m.maxOut/1000)|0}K</span>${m.image?'<span class="badge badge-info">vision</span>':''}${m.visionFallback?`<span class="badge badge-accent">🔁 ${esc(m.visionFallback)}</span>`:''}${m.thinking?'<span class="badge badge-purple">thinking</span>':''}${m.toolCalling?`<span class="badge badge-muted">🔧 ${m.toolCalling}</span>`:''}${m.pricing?`<span class="badge badge-success">💰 ${esc(m.pricing)}</span>`:''}</div>
     <div class="model-actions">
       <button class="btn btn-sm btn-ghost btn-icon" title="Edit" onclick="edCust('${esc(m.id)}','${esc(m.family)}')">${iEdit()}</button>
       <button class="btn btn-sm btn-ghost btn-icon" title="${hid?'Show in picker':'Hide from picker'}" onclick="togCust('${esc(m.id)}','${esc(m.family)}')">${hid?iEyeOff():iEye()}</button>
@@ -219,31 +221,35 @@ function rMod(){
     ${blt}${cust}${!blt&&!cust?'<div style="color:var(--color-text-muted);padding:12px 0">No models for this provider.</div>':''}
     <div class="card"><div class="card-header">➕ Add Model</div>
     <div class="form-row"><div class="form-group"><label class="form-label">Model ID</label><input class="form-input sm" id="mId" placeholder="my-model"></div><div class="form-group"><label class="form-label">Name</label><input class="form-input sm" id="mNm" placeholder="My Model"></div><div class="form-group"><label class="form-label">Family</label><div class="dropdown-wrap" id="ddMF"></div></div></div>
-    <div class="form-row"><div class="form-group"><label class="form-label">Context In</label><div class="dropdown-wrap" id="ddMC"></div></div><div class="form-group"><label class="form-label">Max Out</label><div class="dropdown-wrap" id="ddMO"></div></div><div class="form-group"><label class="form-label">API Path</label><div class="dropdown-wrap" id="ddMAP"></div></div></div>
-    <div class="form-row"><div class="form-group"><label class="form-label">Tools</label><div class="dropdown-wrap" id="ddMT"></div></div><div style="display:flex;gap:24px;align-items:flex-end;padding-bottom:12px"><div class="checkbox-wrap" id="cbVis"><div class="checkbox-box"><svg class="checkbox-icon" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3"/></svg></div><span class="checkbox-label">Vision</span></div><div class="checkbox-wrap" id="cbThk"><div class="checkbox-box"><svg class="checkbox-icon" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3"/></svg></div><span class="checkbox-label">Thinking</span></div></div></div>
+    <div class="form-row"><div class="form-group" style="flex:2"><label class="form-label">Description <span class="badge badge-muted">shows below name</span></label><input class="form-input sm" id="mDsc" placeholder="Fast, general-purpose model"></div></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Input Tokens</label><div class="dropdown-wrap" id="ddMC"></div></div><div class="form-group"><label class="form-label">Output Tokens</label><div class="dropdown-wrap" id="ddMO"></div></div><div class="form-group"><label class="form-label">API Path</label><div class="dropdown-wrap" id="ddMAP"></div></div></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Tools</label><div class="dropdown-wrap" id="ddMT"></div></div><div style="display:flex;gap:24px;align-items:flex-end;padding-bottom:12px"><div class="checkbox-wrap" id="cbVis"><div class="checkbox-box"><svg class="checkbox-icon" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3"/></svg></div><span class="checkbox-label">Vision</span></div><div class="checkbox-wrap" id="cbThk"><div class="checkbox-box"><svg class="checkbox-icon" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3"/></svg></div><span class="checkbox-label">Thinking</span></div></div><div class="form-group" style="flex:0.7"><label class="form-label">Pricing /1M tokens</label><input class="form-input sm" id="mPr" placeholder="in $0.14 / out $0.28 / cache $0.0028"></div></div>
+    <div class="form-row"><div class="form-group" style="flex:1"><label class="form-label">Vision Fallback <span class="badge badge-muted">per‑model</span></label><div class="dropdown-wrap" id="ddMVF"></div></div></div>
     <button class="btn btn-primary btn-sm" onclick="addMod()">${iPlus()} Add Model</button></div>`;
 }
-let dF,dC,dO,dT,cV,cT,dAP,ddKeyProv;
-function addMod(){const id=gid('mId').value.trim();if(!id)return toast('❌ Model ID required');const e={id,name:gid('mNm').value.trim()||id,family:dF.value,maxIn:+dC.value,maxOut:+dO.value,image:cV.checked,thinking:cT.checked,toolCalling:+dT.value,apiPath:dAP.value==='/chat/completions'?undefined:dAP.value,detail:gid('mNm').value.trim()||'User-defined model',version:'custom'};vsc.postMessage({type:'saveModel',payload:e});gid('mId').value='';gid('mNm').value='';toast('✅ Model added');resetFormMode()}
+let dF,dC,dO,dT,cV,cT,dAP,dVF,ddKeyProv;
+function addMod(){const id=gid('mId').value.trim();if(!id)return toast('❌ Model ID required');const vf=dVF?dVF.value:'';const nm=gid('mNm').value.trim();const dsc=gid('mDsc').value.trim();const e={id,name:nm||id,family:dF.value,maxIn:+dC.value,maxOut:+dO.value,image:cV.checked,thinking:cT.checked,toolCalling:+dT.value,apiPath:dAP.value==='/chat/completions'?undefined:dAP.value,pricing:gid('mPr').value.trim()||undefined,visionFallback:vf||undefined,detail:nm||'User-defined model',tooltip:dsc||undefined,version:'custom'};vsc.postMessage({type:'saveModel',payload:e});gid('mId').value='';gid('mNm').value='';gid('mDsc').value='';gid('mPr').value='';toast('✅ Model added');resetFormMode();render();}
 function rmMod(id,f){confirmModal('Delete this model?','This cannot be undone.',()=>{vsc.postMessage({type:'removeModel',payload:{id,family:f}});toast('🗑 Deleted')})}
 function togBlt(id){vsc.postMessage({type:'toggleBuiltin',payload:{id}})}
 function delBlt(id){confirmModal('Hide this built‑in model?','It will disappear from the Copilot picker.',()=>{vsc.postMessage({type:'deleteBuiltin',payload:{id}});toast('🗑 Hidden')})}
 function togCust(id,f){vsc.postMessage({type:'toggleCustom',payload:{id,family:f}})}
-function resetFormMode(){const btn=document.querySelector('#content button.btn-primary');if(btn){btn.innerHTML=iPlus()+' Add Model';btn.onclick=addMod}}
+function resetFormMode(){const btn=document.querySelector('#content button.btn-primary');if(btn){btn.innerHTML=iPlus()+' Add Model';btn.onclick=addMod};if(dF)dF.locked=false;}
 async function edCust(id,f){
   const m=(st.models||[]).find(x=>x.id===id&&x.family===f);if(!m)return;
   document.querySelectorAll('.sidebar-tab').forEach(t=>t.classList.remove('active'));
   document.querySelector('.sidebar-tab[data-tab="models"]').classList.add('active');
   active='models';render();
   setTimeout(()=>{
-    gid('mId').value=m.id;gid('mNm').value=m.name||m.id;
-    if(dF)dF.value=m.family;if(dC)dC.value=String(m.maxIn);if(dO)dO.value=String(m.maxOut);
+    gid('mId').value=m.id;gid('mNm').value=m.name||m.id;gid('mDsc').value=m.tooltip||m.detail||'';
+    if(dF){dF.value=m.family;dF.locked=true;}if(dC)dC.value=String(m.maxIn);if(dO)dO.value=String(m.maxOut);
     if(dT)dT.value=String(m.toolCalling);if(dAP)dAP.value=m.apiPath||'/chat/completions';
     if(cV)cV.checked=m.image;if(cT)cT.checked=m.thinking;
+    if(dVF)dVF.value=m.visionFallback||'';
+    gid('mPr').value=m.pricing||'';
     const btn=document.querySelector('#content button.btn-primary');
     if(btn){btn.innerHTML=iEdit()+' Update Model';btn.onclick=function(){
-      const nm=gid('mNm').value.trim();const e={id:m.id,name:nm||m.id,family:dF.value,maxIn:+dC.value,maxOut:+dO.value,image:cV.checked,thinking:cT.checked,toolCalling:+dT.value,apiPath:dAP.value==='/chat/completions'?undefined:dAP.value,detail:nm||m.detail,version:m.version||'custom'};
-      vsc.postMessage({type:'saveModel',payload:e});gid('mId').value='';gid('mNm').value='';toast('✅ Model updated');resetFormMode();
+      const vf2=dVF?dVF.value:'';const nm=gid('mNm').value.trim();const dsc2=gid('mDsc').value.trim();const e={id:m.id,name:nm||m.id,family:dF.value,maxIn:+dC.value,maxOut:+dO.value,image:cV.checked,thinking:cT.checked,toolCalling:+dT.value,apiPath:dAP.value==='/chat/completions'?undefined:dAP.value,pricing:gid('mPr').value.trim()||undefined,visionFallback:vf2||undefined,detail:nm||m.detail,tooltip:dsc2||m.tooltip||undefined,version:m.version||'custom'};
+      vsc.postMessage({type:'saveModel',payload:e});gid('mId').value='';gid('mNm').value='';gid('mPr').value='';toast('✅ Model updated');resetFormMode();
     }}
     document.querySelector('.content').scrollTop=9999;
   },60);
@@ -257,14 +263,16 @@ async function edBlt(id){
   active='models';render();
   // Wait for render then fill form
   setTimeout(()=>{
-    gid('mId').value=m.id;gid('mNm').value=m.name;
-    if(dF)dF.value=m.family;if(dC)dC.value=String(m.maxIn);if(dO)dO.value=String(m.maxOut);
+    gid('mId').value=m.id;gid('mNm').value=m.name;gid('mDsc').value=m.tooltip||m.detail||'';
+    if(dF){dF.value=m.family;dF.locked=true;}if(dC)dC.value=String(m.maxIn);if(dO)dO.value=String(m.maxOut);
     if(dT)dT.value=String(m.toolCalling);if(dAP)dAP.value=m.apiPath||'/chat/completions';
     if(cV)cV.checked=m.image;if(cT)cT.checked=m.thinking;
+    if(dVF)dVF.value=m.visionFallback||'';
+    gid('mPr').value=m.pricing||'';
     // Change button to "Update" mode
     const btn=document.querySelector('#content button.btn-primary');
     if(btn){btn.innerHTML=iEdit()+' Update Built‑in';btn.onclick=function(){
-      const e={id:m.id,name:gid('mNm').value.trim()||m.id,family:dF.value,maxIn:+dC.value,maxOut:+dO.value,image:cV.checked,thinking:cT.checked,toolCalling:+dT.value,apiPath:dAP.value==='/chat/completions'?undefined:dAP.value,detail:gid('mNm').value.trim()||m.detail,version:m.version};
+      const vf3=dVF?dVF.value:'';const dsc3=gid('mDsc').value.trim();const e={id:m.id,name:gid('mNm').value.trim()||m.id,family:dF.value,maxIn:+dC.value,maxOut:+dO.value,image:cV.checked,thinking:cT.checked,toolCalling:+dT.value,apiPath:dAP.value==='/chat/completions'?undefined:dAP.value,pricing:gid('mPr').value.trim()||undefined,visionFallback:vf3||undefined,detail:gid('mNm').value.trim()||m.detail,tooltip:dsc3||m.tooltip||undefined,version:m.version};
       vsc.postMessage({type:'editBuiltin',payload:e});gid('mId').value='';gid('mNm').value='';toast('✅ Built‑in updated');resetFormMode();
     }}
     document.querySelector('.content').scrollTop=9999;
@@ -311,17 +319,48 @@ function addKey(){
 function clrKey(f){vsc.postMessage({type:'clearApiKey',payload:{family:f}})}
 
 // --- Config ---
-function rCfg(){return`<div class="content-title">⚙️ Configuration</div><div class="content-subtitle">Global settings for all providers</div>
+function rCfg(){
+  const sp = st.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+  const up = st.userPromptTemplate || '';
+  return`<div class="content-title">⚙️ Configuration</div><div class="content-subtitle">Global settings for all providers</div>
   <div class="card"><div class="card-header">Max Output Tokens</div><div class="inline-row"><input class="form-input sm" id="cfgMaxT" value="${st.maxTokens||''}" placeholder="0 = unlimited" style="width:160px"><button class="btn btn-sm btn-primary" onclick="svCfg('maxTokens',+gid('cfgMaxT').value||0)">💾 Save</button></div></div>
   <div class="card"><div class="card-header">Log Level</div><div class="dropdown-wrap" id="ddLog"></div></div>
   <div class="card"><div class="card-header">Tool Stabilization <span class="badge badge-warning">experimental</span></div><div class="checkbox-wrap" id="cbStab"><div class="checkbox-box"><svg class="checkbox-icon" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3"/></svg></div><span class="checkbox-label">Pre‑activate tools for cache stability</span></div></div>
-`;
-}
+  <div class="card">
+    <div class="card-header">👁️ Vision Fallback</div>
+    <div class="content-subtitle" style="margin-top:0;margin-bottom:8px">When a model doesn't support images, a vision-capable model describes the image as text.</div>
+    <div class="form-group"><label class="form-label">Fallback Model</label><div class="dropdown-wrap" id="ddVisionFallback"></div></div>
+    <div class="form-group"><div class="checkbox-wrap" id="cbVfAlways"><div class="checkbox-box"><svg class="checkbox-icon" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3"/></svg></div><span class="checkbox-label">Always preprocess images through fallback (recommended)</span></div></div>
+    <div class="form-group"><label class="form-label">Vision Prompt <span class="badge badge-info">system</span></label>
+    <div style="font-size:10px;color:var(--color-text-muted);margin-bottom:4px">Placeholders: <code>{model}</code> <code>{date}</code> <code>{tools}</code> <code>{cakVersion}</code></div>
+    <textarea class="form-input" id="sysPrompt" rows="6" style="font-family:monospace;font-size:11px;resize:vertical;min-height:100px">${esc(sp)}</textarea>
+    <div style="margin-top:6px;display:flex;gap:6px">
+      <button class="btn btn-sm btn-primary" onclick="svCfg('systemPrompt',gid('sysPrompt').value)">💾 Save</button>
+      <button class="btn btn-sm btn-ghost" onclick="gid('sysPrompt').value=DEFAULT_SYSTEM_PROMPT;toast('↩️ Reset')">↩️ Default</button>
+    </div></div>
+    <div class="form-group"><label class="form-label">User Prompt Wrapper <span class="badge badge-purple">template</span></label>
+    <div style="font-size:10px;color:var(--color-text-muted);margin-bottom:4px">Use <code>{userMessage}</code> placeholder. Leave empty for no wrapping.</div>
+    <textarea class="form-input" id="usrPrompt" rows="3" style="font-family:monospace;font-size:11px;resize:vertical;min-height:60px" placeholder="[CONTEXT]\\n\\n{userMessage}\\n\\n[/CONTEXT]">${esc(up)}</textarea>
+    <div style="margin-top:6px"><button class="btn btn-sm btn-primary" onclick="svCfg('userPromptTemplate',gid('usrPrompt').value)">💾 Save</button></div></div>
+  </div>
+`;}
 function svCfg(k,v){vsc.postMessage({type:'saveConfig',payload:{key:k,value:v}});toast('✅ Saved')}
+
+// Default system prompt — based on what Copilot sends to the LLM
+const DEFAULT_SYSTEM_PROMPT = `You are {model}, an expert AI programming assistant working with a user in the VS Code editor.
+When asked for your name, you must respond with "{model}".
+Follow the user's requirements carefully & to the letter.
+Follow Microsoft content policies.
+Avoid content that violates copyrights.
+If you are asked to generate content that is harmful, hateful, racist, sexist, lewd, or violent, only respond with "Sorry, I can't assist with that."
+Keep your answers short and impersonal.
+
+Today's date is {date}.
+Available tools: {tools}`;
 
 // --- JSON & Dumps ---
 function rJson(){return`<div class="content-title">{ } JSON Settings</div><div class="content-subtitle">Raw settings.json editor for advanced users</div><div><button class="btn btn-ghost" onclick="vsc.postMessage({type:'openSettings'})">${iGear()} Open settings.json</button></div><div style="margin-top:12px;color:var(--color-text-muted);font-size:12px">Form changes write to the same JSON keys.</div>`}
-function rDmp(){return`<div class="content-title">📂 Request Dumps</div><div class="content-subtitle">Payloads saved when log level = dump</div><div><button class="btn btn-ghost" onclick="vsc.postMessage({type:'openDumps'})">${iFolder()} Open Dumps Folder</button></div><div style="margin-top:12px;color:var(--color-text-muted);font-size:12px">Set log level to "dump" in Configuration tab.</div>`}
+function rDmp(){return`<div class="content-title">📂 Request Dumps</div><div class="content-subtitle">Payloads saved when log level = dump</div><div><button class="btn btn-ghost" onclick="vsc.postMessage({type:'openDumps'})">${iFolder()} Open Dumps Folder</button></div><div style="margin-top:12px;color:var(--color-text-muted);font-size:12px">Dumps include <code>.json</code> (payload), <code>.sys.txt</code> (system prompt), <code>.tools.json</code>, <code>.error.json</code>, and <code>.vision-fallback.json</code> when vision fallback is active.</div>`}
 function rDanger(){return`<div class="content-title" style="color:var(--color-error)">⚠️ Danger Zone</div><div class="content-subtitle">These actions cannot be undone. Proceed with caution.</div>
   <div class="card" style="border-color:rgba(239,68,68,.3)">
     <div class="card-header" style="color:var(--color-error)">🗑 Delete All</div>
@@ -384,6 +423,53 @@ function ddMake(id, opts, sel, onCh) {
   return inst;
 }
 
+/** Grouped dropdown — items have .g for group label. Groups are rendered as non-selectable headers. */
+function ddMakeGrouped(id, opts, sel, onCh) {
+  const wrap = document.getElementById(id);
+  if (!wrap) return;
+  let val = String(sel);
+  let open = false;
+
+  function refresh() {
+    const cur = opts.find(o => String(o.v||o.value) === val) || { l: val, label: val };
+    let h = `<div class="dropdown-trigger sm${open?' open':''}" onclick="event.stopPropagation();window._ddReg['${id}'].toggle()"><span>${cur.l||cur.label}</span><span class="dropdown-arrow">▼</span></div>`;
+    if (open) {
+      let lastGroup = null;
+      h += `<div class="dropdown-menu${opts.length>8?' flip-up':''}" id="${id}-menu">`;
+      for (const o of opts) {
+        if (o.g && o.g !== lastGroup) {
+          lastGroup = o.g;
+          h += `<div class="dropdown-group-header">${esc(o.g)}</div>`;
+        }
+        h += `<div class="dropdown-item${String(o.v||o.value)===val?' selected':''}" onclick="event.stopPropagation();window._ddReg['${id}'].pick('${o.v||o.value}')">${o.l||o.label}</div>`;
+      }
+      h += '</div>';
+    }
+    wrap.innerHTML = h;
+  }
+
+  const inst = {
+    get value() { return val; },
+    set value(v) { val = v; refresh(); if (onCh) onCh(v); },
+    options: opts, refresh,
+    close() { open = false; refresh(); },
+    toggle() {
+      const prev = window._openDD;
+      if (prev && prev !== wrap && prev._inst) { prev._inst.close(); }
+      open = !open; refresh();
+      window._openDD = open ? wrap : null;
+    },
+    pick(v) {
+      val = v; open = false; refresh(); window._openDD = null;
+      if (onCh) onCh(v);
+    }
+  };
+  wrap._inst = inst;
+  window._ddReg[id] = inst;
+  refresh();
+  return inst;
+}
+
 document.addEventListener('click', function() {
   if (window._openDD && window._openDD._inst) { window._openDD._inst.close(); window._openDD = null; }
 });
@@ -394,19 +480,57 @@ function rebindDD() {
     if (d._inst) { d._inst.close(); delete d._inst; }
   });
   if (active === 'providers') {
-    const engFams = (st.engineFamilies || ['openai']);
-    ddProvFamily = ddMake('ddProvFamily', engFams.map(f=>({v:f,l:f})), engFams[0]);
+    const engFams = (st.engineFamilies || []);
+    const famOpts = engFams.map(f => ({ v: f.family, l: f.label, du: f.defaultUrl }));
+    // Build URL lookup
+    window._famUrls = {};
+    for (const f of engFams) window._famUrls[f.family] = f.defaultUrl || '';
+    ddProvFamily = ddMake('ddProvFamily', famOpts, engFams[0]?.family || 'openai', function(v) {
+      // Auto-populate base URL
+      const url = window._famUrls[v] || '';
+      const urlEl = gid('pfU');
+      if (urlEl && (!urlEl.value || urlEl.value === window._famUrls[ddProvFamily.value] || urlEl.dataset.auto === '1')) {
+        urlEl.value = url;
+        urlEl.dataset.auto = '1';
+      }
+    });
   }
   if (active === 'models') {
     const fams = Object.keys(st.providers); if (!fams.length) fams.push('openai');
-    const famLabels = fams.map(f => ({ v: f, l: (st.providers[f]||{}).name || f }));
+    const famLabels = fams.map(f => {
+      const famDef = (st.engineFamilies||[]).find((x)=>x.family===f);
+      const pname = (st.providers[f]||{}).name;
+      return { v: f, l: pname || famDef?.label || f };
+    });
     ddMake('ddModelFilter', famLabels, modelFilter || fams[0], function(v){modelFilter=v;render();});
-    dF = ddMake('ddMF', fams.map(f => ({ v: f, l: f })), fams[0]);
+    dF = ddMake('ddMF', famLabels, fams[0]);
+    // Lock Family dropdown when a Provider is selected in the filter
+    const lockFamDropdown = function() {
+      if (dF) { dF.value = modelFilter || fams[0]; dF.locked = true; }
+    };
+    // Listen to modelFilter changes to also lock family
+    const origFilterOpts = [];
+    for (const fl of famLabels) origFilterOpts.push(fl);
+    lockFamDropdown(); // Initial lock
     dC = ddMake('ddMC', [{ v: '4096', l: '4K' }, { v: '8192', l: '8K' }, { v: '16384', l: '16K' }, { v: '32768', l: '32K' }, { v: '65536', l: '64K' }, { v: '128000', l: '128K' }, { v: '200000', l: '200K' }, { v: '400000', l: '400K' }, { v: '1000000', l: '1M' }], '128000');
-    dO = ddMake('ddMO', [{ v: '4096', l: '4K' }, { v: '8192', l: '8K' }, { v: '16384', l: '16K' }, { v: '32768', l: '32K' }, { v: '65536', l: '64K' }, { v: '128000', l: '128K' }], '16384');
+    dO = ddMake('ddMO', [{ v: '4096', l: '4K' }, { v: '8192', l: '8K' }, { v: '16384', l: '16K' }, { v: '32768', l: '32K' }, { v: '65536', l: '64K' }, { v: '128000', l: '128K' }, { v: '384000', l: '384K' }], '16384');
     dT = ddMake('ddMT', [{ v: '0', l: 'None' }, { v: '16', l: '16' }, { v: '32', l: '32' }, { v: '64', l: '64' }, { v: '128', l: '128' }], '128');
     dAP = ddMake('ddMAP', [{ v: '/chat/completions', l: '/chat/completions' }, { v: '/responses', l: '/responses' }], '/chat/completions');
     cV = bindCb('cbVis', true); cT = bindCb('cbThk', false);
+    // Per-model vision fallback dropdown — same items as global
+    const allLm2 = st.copilotModels || [];
+    const copilotItems2 = allLm2.filter(m=>m.vendor==='copilot'||m.vendor==='github-copilot')
+      .map(m=>({v:'copilot:'+m.id,l:m.name,g:'Copilot'}));
+    const cakLmItems2 = allLm2.filter(m=>m.vendor==='copilot-adapter-kit')
+      .map(m=>({v:m.family+':'+m.id,l:m.name+' ('+m.family+')',g:'Copilot Adapter Kit'}));
+    const cakLmIds2 = new Set(cakLmItems2.map(x=>x.v));
+    const extraCak2 = (st.models||[]).filter(m=>m.image).filter(m=>!cakLmIds2.has(m.family+':'+m.id))
+      .map(m=>({v:m.family+':'+m.id,l:(m.name||m.id)+' ('+m.family+')',g:'Copilot Adapter Kit'}));
+    const vfModelItems = [...copilotItems2, ...cakLmItems2, ...extraCak2];
+    vfModelItems.unshift({v:'',l:'🔇 None (inherit global)',g:''});
+    dVF = ddMakeGrouped('ddMVF', vfModelItems, '', function(v){});
+    // Re-lock family after dropdown rebuild (render re-creates DOM)
+    lockFamDropdown();
   }
   if (active === 'config') {
     ddMake('ddLog', [{ v: 'quiet', l: '🔇 Quiet' }, { v: 'meta', l: '📋 Meta' }, { v: 'dump', l: '💾 Dump' }], st.logLevel || 'quiet', function(v) {
@@ -416,10 +540,34 @@ function rebindDD() {
     cs.el.addEventListener('click', function() {
       vsc.postMessage({ type: 'saveConfig', payload: { key: 'stabilizeTools', value: cs.checked } }); toast('✅ Stabilize: ' + (cs.checked ? 'ON' : 'OFF'));
     });
+    // Vision fallback grouped dropdown — Copilot models + CAK models
+    const allLm = st.copilotModels || [];
+    const copilotItems = allLm.filter(m=>m.vendor==='copilot'||m.vendor==='github-copilot')
+      .map(m=>({v:'copilot:'+m.id,l:m.name,g:'Copilot'}));
+    const cakLmItems = allLm.filter(m=>m.vendor==='copilot-adapter-kit')
+      .map(m=>({v:m.family+':'+m.id,l:m.name+' ('+m.family+')',g:'Copilot Adapter Kit'}));
+    // Also include models from st.models that aren't already in cakLmItems
+    const cakLmIds = new Set(cakLmItems.map(x=>x.v));
+    const extraCak = (st.models||[]).filter(m=>m.image).filter(m=>!cakLmIds.has(m.family+':'+m.id))
+      .map(m=>({v:m.family+':'+m.id,l:(m.name||m.id)+' ('+m.family+')',g:'Copilot Adapter Kit'}));
+    const visionItems = [...copilotItems, ...cakLmItems, ...extraCak];
+    visionItems.unshift({v:'',l:'🔇 None (disable)',g:''});
+    ddMakeGrouped('ddVisionFallback', visionItems, st.visionFallbackModel||'', function(v){
+      vsc.postMessage({type:'saveConfig',payload:{key:'visionFallbackModel',value:v}});toast('✅ Vision fallback: '+(v||'disabled'));
+    });
+    const cvf = bindCb('cbVfAlways', st.visionFallbackAlways !== false);
+    cvf.el.addEventListener('click', function() {
+      vsc.postMessage({ type:'saveConfig', payload:{ key:'visionFallbackAlways', value: cvf.checked } });
+      toast('✅ Fallback mode: ' + (cvf.checked ? 'always on' : 'only unsupported models'));
+    });
   }
   if (active === 'keys') {
     const fams = Object.keys(st.providers); if (!fams.length) return;
-    ddKeyProv = ddMake('ddKeyProv', fams.map(f => ({ v: f, l: (st.providers[f]||{}).name || f })), fams[0]);
+    const keyFamLabels = fams.map(f => {
+      const famDef = (st.engineFamilies||[]).find((x)=>x.family===f);
+      return { v: f, l: famDef?.label || (st.providers[f]||{}).name || f };
+    });
+    ddKeyProv = ddMake('ddKeyProv', keyFamLabels, fams[0]);
   }
 }
 

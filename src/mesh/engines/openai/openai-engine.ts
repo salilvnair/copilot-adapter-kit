@@ -8,9 +8,13 @@ interface SseChunk {
 }
 
 export class OpenAIEngine implements Engine {
-  readonly family = 'openai';
+  readonly family: string;
   private baseUrl = '';
   private apiKey = '';
+
+  constructor(family = 'openai') {
+    this.family = family;
+  }
 
   configure(endpoint: string, key: string): void {
     this.baseUrl = endpoint; this.apiKey = key;

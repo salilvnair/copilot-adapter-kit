@@ -6,6 +6,7 @@ export interface ProviderConfig {
   defaultApiPath?: string;
   modelApiPaths?: Record<string, string>;
   modelAlias?: Record<string, string>;
+  visionFallback?: string;
 }
 
 export type LogLevel = 'quiet' | 'meta' | 'dump';
@@ -51,5 +52,31 @@ export class Tuning {
   resolveApiPath(pickerId: string, family: string): string {
     const p = this.provider(family);
     return (p.modelApiPaths?.[pickerId] || p.defaultApiPath || '/chat/completions').trim();
+  }
+
+  /** Resolves vision fallback provider for a model. Falls back: model override → provider default → undefined. */
+  resolveVisionFallback(pickerId: string, family: string): string | undefined {
+    const p = this.provider(family);
+    return p.modelApiPaths?.[pickerId + '.vision'] || p.visionFallback || undefined;
+  }
+
+  /** Global vision fallback model ID. Format: family:modelId or just modelId. */
+  get visionFallbackModel(): string {
+    return this.cfg().get<string>('visionFallbackModel', '');
+  }
+
+  /** When enabled, always preprocess image inputs through the configured vision fallback model. */
+  get visionFallbackAlways(): boolean {
+    return this.cfg().get<boolean>('visionFallbackAlways', false);
+  }
+
+  /** Custom system prompt template. Empty = use Copilot default. */
+  get systemPrompt(): string {
+    return this.cfg().get<string>('systemPrompt', '');
+  }
+
+  /** Custom user prompt wrapper template. Uses {userMessage} placeholder. */
+  get userPromptTemplate(): string {
+    return this.cfg().get<string>('userPromptTemplate', '');
   }
 }

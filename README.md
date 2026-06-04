@@ -5,8 +5,8 @@
 </h1>
 
 <p align="center">
-  <strong>Plugin &middot; Mesh &middot; Deploy</strong><br/>
-  <em>Any model. Every provider. One picker. Zero compromise.</em>
+  <strong>Any model. Every provider. One picker.</strong><br/>
+  <em>Plugin-based provider mesh for GitHub Copilot Chat.</em>
 </p>
 
 <p align="center">
@@ -17,15 +17,15 @@
 
 ---
 
-**Copilot Adapter Kit** brings **any OpenAI‑compatible model** into GitHub Copilot Chat — OpenAI, Ollama, LM Studio, vLLM, Groq, Fireworks, Together AI, or your own self‑hosted endpoint. All at once, side‑by‑side in the model picker.
+Copilot Adapter Kit brings any model into GitHub Copilot Chat — OpenAI, Anthropic (native Messages API), Ollama, LM Studio, vLLM, Groq, Fireworks, Together AI, DeepSeek, or your own self-hosted endpoint. All at once, side-by-side in the model picker.
 
-Agent mode. Tool calling. Streaming. Vision. Thinking blocks. Built‑in 429 retry, error mapping, diagnostics, and request dumps. Zero code changes when adding new providers — just JSON config.
-
-> **One extension. Every backend. Zero friction.**
+Agent mode. Tool calling. Streaming. Vision fallback. Thinking blocks. Rate-limit retry. Error mapping. Request diagnostics. All built in.
 
 ---
 
-## ⚡ 30‑Second Setup
+## Getting Started
+
+### Quickstart
 
 ```jsonc
 // settings.json
@@ -36,88 +36,54 @@ Agent mode. Tool calling. Streaming. Vision. Thinking blocks. Built‑in 429 ret
 }
 ```
 
-```
-1. Cmd+Shift+P → "Copilot Adapter Kit: Set API Key" → pick "openai" → paste sk-...
-2. Click **$(cak-icon) CAK** in the status bar → Add Provider (family: openai, name: My OpenAI, URL) → Add Model (id, name, family: openai)
-3. Cmd+Shift+I → Copilot Chat → pick your model from the dropdown
-4. Chat. Done.
-```
+1. **Cmd+Shift+P** → `Copilot Adapter Kit: Set API Key` → pick `openai` → paste your key
+2. Click **CAK** in the status bar → **Add Model** → enter model id, name, family
+3. **Cmd+Shift+I** → Copilot Chat → pick your model from the dropdown
+4. Chat.
+
+### Open the Settings Panel
+
+Click **CAK** in the status bar, or run `Copilot Adapter Kit: Open Panel` from the command palette.
+
+The panel has tabs:
+- **Providers** — add/edit/remove API endpoints
+- **Models** — add/edit/remove models visible in the picker
+- **Keys** — manage API keys per provider
+- **Configuration** — log level, vision fallback, prompts, tool stabilization
+- **Request Dumps** — full payload logs for debugging
 
 ---
 
-## 📋 Table of Contents
+## Consumer Guide
 
-- [Providers & Recipes](#-providers--recipes)
-  - [OpenAI](#openai)
-  - [Ollama](#ollama)
-  - [LM Studio](#lm-studio)
-  - [Any OpenAI‑Compatible Provider](#any-openai-compatible-provider)
-  - [Multiple Providers at Once](#multiple-providers-at-once)
-- [Manage Models](#-manage-models)
-- [Architecture](#-architecture)
-- [Settings Reference](#-settings-reference)
-- [Commands Reference](#-commands-reference)
-- [Interceptors (Built‑in Middleware)](#-interceptors)
-- [Developer Guide](#-developer-guide)
-  - [Project Structure](#project-structure)
-  - [Adding a New Engine](#adding-a-new-engine)
-  - [Adding a New Interceptor](#adding-a-new-interceptor)
-- [Troubleshooting](#-troubleshooting)
-- [Contributing](#-contributing)
-- [License](#license)
+### Providers
 
----
+Add one or more providers. Each provider needs a family name and a base URL.
 
-## 🌐 Providers & Recipes
+**In the panel:** Providers tab → choose family → enter base URL → Add.
 
-Copilot Adapter Kit uses a **family‑based routing model**. Each provider family gets its own endpoint, API key, and optional model aliases. The bridge resolves `model → family → provider config + key → engine` automatically.
+Each provider gets its own API key. Set keys in the Keys tab or via `Copilot Adapter Kit: Set API Key`.
 
-### OpenAI
+#### Provider Families
 
-The default family. Uses the OpenAI Chat Completions API over SSE streaming.
+| Family | Default Base URL |
+|---|---|
+| `openai` | `https://api.openai.com/v1` |
+| `deepseek` | `https://api.deepseek.com/v1` |
+| `groq` | `https://api.groq.com/openai/v1` |
+| `fireworks` | `https://api.fireworks.ai/inference/v1` |
+| `together` | `https://api.together.xyz/v1` |
+| `openrouter` | `https://openrouter.ai/api/v1` |
+| `mistral` | `https://api.mistral.ai/v1` |
+| `xai` | `https://api.x.ai/v1` |
+| `ollama` | `http://localhost:11434/v1` |
+| `lmstudio` | `http://localhost:1234/v1` |
+| `vllm` | `http://localhost:8000/v1` |
+| `custom` | (you define it) |
 
-```jsonc
-// settings.json
-{
-  "copilot-adapter-kit.providers": {
-    "openai": {
-      "name": "My OpenAI",
-      "baseUrl": "https://api.openai.com/v1"
-    }
-  }
-}
-```
+#### Model Aliases
 
-```
-Cmd+Shift+P → "Copilot Adapter Kit: Set API Key" → pick "openai" → paste sk-...
-```
-
-**What you get:**
-- Add your own models via the Panel UI or `copilot-adapter-kit.models` setting
-- Vision (paste screenshots into chat)
-- Tool calling (Agent mode)
-- 128 tool limit, up to 1M context
-- All models are user‑defined — no built‑ins, full control
-
----
-
-### Ollama
-
-Run models locally via Ollama's OpenAI‑compatible endpoint. No API key needed, no data leaves your machine.
-
-**Step 1:** Install & start Ollama
-
-```bash
-# macOS
-brew install ollama
-ollama serve
-
-# Pull a model
-ollama pull llama3.1:8b-instruct-q8_0
-ollama pull qwen2.5-coder:14b
-```
-
-**Step 2:** Configure the provider
+If your provider uses different model names than what you want in the picker:
 
 ```jsonc
 {
@@ -125,636 +91,431 @@ ollama pull qwen2.5-coder:14b
     "ollama": {
       "baseUrl": "http://localhost:11434/v1",
       "modelAlias": {
-        "llama3-8b": "llama3.1:8b-instruct-q8_0",
-        "qwen-coder": "qwen2.5-coder:14b"
+        "llama3-8b": "llama3.1:8b-instruct-q8_0"
       }
     }
   }
 }
 ```
 
-**Step 3:** Register models in the picker
+The picker shows `llama3-8b` but the API receives `llama3.1:8b-instruct-q8_0`.
 
-```jsonc
-{
-  "copilot-adapter-kit.models": [
-    {
-      "id": "llama3-8b",
-      "name": "Llama 3.1 8B",
-      "family": "ollama",
-      "detail": "Local Llama 3.1 8B Instruct Q8_0",
-      "maxIn": 128000,
-      "maxOut": 8192,
-      "toolCalling": 64
-    },
-    {
-      "id": "qwen-coder",
-      "name": "Qwen 2.5 Coder 14B",
-      "family": "ollama",
-      "detail": "Local Qwen 2.5 Coder 14B",
-      "maxIn": 32768,
-      "maxOut": 8192,
-      "toolCalling": 64,
-      "image": false
-    }
-  ]
-}
-```
+### Models
 
-**Step 4:** Set a dummy API key (Ollama requires one but ignores it)
-
-```
-Cmd+Shift+P → "Copilot Adapter Kit: Set API Key" → pick "ollama" → type "ollama"
-```
-
-**Step 5:** Select your local model from the Copilot Chat picker and start chatting.
-
-> 💡 **Tip for large models:** Set `"maxOut": 8192` or lower to avoid timeouts. Use `"toolCalling": 64` for smaller models that struggle with many tools.
-
----
-
-### LM Studio
-
-LM Studio exposes an OpenAI‑compatible server on port 1234. Same pattern as Ollama.
-
-**Step 1:** Install [LM Studio](https://lmstudio.ai), download a model, and start the local server.
-
-- Go to the **Developer** tab (or **Local Server** tab)
-- Select your model
-- Click **Start Server** (default: `http://localhost:1234`)
-
-**Step 2:** Configure
-
-```jsonc
-{
-  "copilot-adapter-kit.providers": {
-    "lmstudio": {
-      "baseUrl": "http://localhost:1234/v1"
-    }
-  },
-  "copilot-adapter-kit.models": [
-    {
-      "id": "qwen-coder",
-      "name": "Qwen 2.5 Coder",
-      "family": "lmstudio",
-      "detail": "Local via LM Studio",
-      "maxIn": 32768,
-      "maxOut": 8192,
-      "toolCalling": 64,
-      "image": false
-    }
-  ]
-}
-```
-
-**Step 3:** Set a dummy key
-
-```
-Cmd+Shift+P → "Copilot Adapter Kit: Set API Key" → pick "lmstudio" → type "lmstudio"
-```
-
-**Step 4:** Pick your model in Copilot Chat and go.
-
-> ⚠️ **LM Studio note:** The model ID you configure (`"qwen-coder"`) must match the model loaded in LM Studio's server. Use `"modelAlias"` if the LM Studio model name differs from what you want in the picker.
-
----
-
-### Any OpenAI‑Compatible Provider
-
-The `openai` engine speaks the standard OpenAI Chat Completions API. Any provider that implements `/v1/chat/completions` with SSE streaming works out of the box:
-
-| Provider | Base URL |
-|---|---|
-| **Groq** | `https://api.groq.com/openai/v1` |
-| **Fireworks** | `https://api.fireworks.ai/inference/v1` |
-| **Together AI** | `https://api.together.xyz/v1` |
-| **DeepSeek** | `https://api.deepseek.com/v1` |
-| **vLLM** (self‑hosted) | `http://your-server:8000/v1` |
-| **OpenRouter** | `https://openrouter.ai/api/v1` |
-| **Mistral** | `https://api.mistral.ai/v1` |
-| **xAI Grok** | `https://api.x.ai/v1` |
-| **Your own proxy** | `https://your-proxy.example.com/v1` |
-
-**Generic recipe:**
-
-```jsonc
-{
-  "copilot-adapter-kit.providers": {
-    "groq": {
-      "baseUrl": "https://api.groq.com/openai/v1",
-      "modelAlias": { "llama3-70b": "llama-3.1-70b-versatile" }
-    }
-  },
-  "copilot-adapter-kit.models": [
-    {
-      "id": "llama3-70b",
-      "name": "Llama 3.1 70B (Groq)",
-      "family": "groq",
-      "detail": "Groq LPU — blazing fast",
-      "maxIn": 128000,
-      "maxOut": 8192,
-      "toolCalling": 128
-    }
-  ]
-}
-```
-
-```
-Cmd+Shift+P → "Copilot Adapter Kit: Set API Key" → pick "groq" → paste your Groq API key
-```
-
----
-
-### Multiple Providers at Once
-
-All providers can coexist. Each model's `"family"` field determines which engine and API key are used:
-
-```jsonc
-{
-  "copilot-adapter-kit.providers": {
-    "openai":   { "baseUrl": "https://api.openai.com/v1" },
-    "ollama":   { "baseUrl": "http://localhost:11434/v1" },
-    "lmstudio": { "baseUrl": "http://localhost:1234/v1" },
-    "groq":     { "baseUrl": "https://api.groq.com/openai/v1" },
-    "deepseek": { "baseUrl": "https://api.deepseek.com/v1" }
-  },
-  "copilot-adapter-kit.models": [
-    { "id": "gpt-5.5",       "name": "GPT-5.5",          "family": "openai" },
-    { "id": "llama3-8b",     "name": "Llama 3.1 8B",     "family": "ollama" },
-    { "id": "qwen-coder",    "name": "Qwen 2.5 Coder",   "family": "lmstudio" },
-    { "id": "llama3-70b",    "name": "Llama 3.1 70B",    "family": "groq" },
-    { "id": "deepseek-chat", "name": "DeepSeek V4",      "family": "deepseek" }
-  ]
-}
-```
-
-Each family gets its own API key. Run `Set API Key` once per provider.
-
----
-
-## 🧩 Manage Models
-
-There are **no built‑in models**. All models are user‑defined — add them via the Panel UI or JSON.
-
-The **Model ID** is the exact name sent to the API (e.g. `gpt-5.2`, `llama3-70b`). The **Name** is the display label in the picker.
+All models are user-defined. Add them in the Models tab or via `copilot-adapter-kit.models` in settings.
 
 | Field | Required | Description |
 |---|---|---|
-| `id` | ✅ | Exact API model name sent to the provider |
-| `family` | ✅ | Provider family (`openai`, `ollama`, `groq`, etc.) |
+| `id` | ✅ | Model ID sent to the API (e.g. `gpt-5.2`, `deepseek-chat`) |
+| `family` | ✅ | Must match a provider family name |
 | `name` | — | Display name in the picker. Defaults to `id`. |
 | `maxIn` | — | Max input tokens. Default `128000`. |
 | `maxOut` | — | Max output tokens. Default `16384`. |
-| `image` | — | Vision/image support. Default `true`. |
-| `thinking` | — | Reasoning token support. Default `false`. |
+| `image` | — | Model supports vision. Default `true`. |
+| `thinking` | — | Model supports reasoning tokens. Default `false`. |
 | `toolCalling` | — | Max parallel tool calls. Default `128`. |
-| `apiPath` | — | Per‑model API path override (e.g. `/responses`). Falls back to provider default. |
+| `apiPath` | — | Per-model API path override (e.g. `/responses`). |
+| `visionFallback` | — | Per-model vision fallback. Format: `family:modelId`. |
+| `pricing` | — | Cost display. Use structured format for best results. |
+
+#### Pricing Display
+
+Pricing appears in two places — the **model picker subtitle** and the **model details panel** (click the model in the picker).
+
+**Structured format** (recommended) — parsed into separate Input / Output / Cache rows in the details panel:
+
+```
+in $0.14 / out $0.28 / cache $0.0028
+$0.14/$0.28 (cache $0.0028)
+$0.14 → $0.28 | cache $0.0028
+```
+
+**Simple format** — shown as a single row:
+
+```
+$0.14/$0.28
+```
+
+In the picker subtitle it always shows as a compact badge: `💰 $0.14 → $0.28 | cache $0.0028/1M`
+
+### Vision Fallback
+
+When a model doesn't support images, CAK can route images through a vision-capable model and send the text description to your primary model.
+
+#### How it works
+
+1. CAK reports to VS Code that the model can handle images (so attachments aren't blocked)
+2. When you attach an image, the bridge detects it
+3. The image is sent to a **vision fallback model** for description
+4. The text description replaces the image before reaching your primary model
+
+#### Configuration
+
+**Global fallback model** — set in the Configuration tab:
+- **Vision Fallback** dropdown: pick any Copilot or CAK model
+- **Always preprocess images through fallback** checkbox: forces fallback for all models when on
+
+**Per-model fallback** — set in the Models tab when adding/editing a model:
+- **Vision Fallback** dropdown: overrides the global setting for that specific model
+
+#### Trigger conditions
+
+| Fallback always | Model `image` flag | Behavior |
+|---|---|---|
+| OFF (default) | `true` | Images sent directly to model |
+| OFF (default) | `false` | Fallback runs automatically |
+| ON | any | Fallback always runs |
+
+### Thinking Models & Reasoning
+
+Models with `thinking: true` support reasoning tokens. VS Code shows a glow animation for thinking blocks.
+
+CAK persists the chain-of-thought across conversation turns. When a thinking model responds, its reasoning is captured and re-injected as `reasoning_content` in the next API call. This preserves reasoning context.
+
+Configure `reasoningEffort` (None / High / Max) per-model in VS Code's model configuration dropdown.
+
+### Prompts
+
+Customize the system prompt and user message template in the Configuration tab:
+
+- **System Prompt** — injected as the first message. Supports placeholders: `{model}`, `{date}`, `{tools}`, `{cakVersion}`.
+- **User Prompt Template** — wraps user messages. Use `{userMessage}` as the placeholder.
+
+### Logging & Diagnostics
+
+| Level | What you get |
+|---|---|
+| `quiet` | Nothing in output channel (default) |
+| `meta` | Request fingerprints, message diffs, cache trace |
+| `dump` | Meta + full request payloads written to disk |
+
+Access logs via `Copilot Adapter Kit: Show Logs`. View dumps via `Copilot Adapter Kit: Open Dumps Folder`.
+
+### Tool Stabilization
+
+When you see "tool list is unstable" warnings, enable `stabilizeTools` in the Configuration tab. This pre-activates VS Code tools to lock the tools array across conversation turns, improving cache prefix stability.
 
 ---
 
-## 🧱 Architecture
+## Commands
+
+All commands available via `Cmd+Shift+P` under `Copilot Adapter Kit:`.
+
+| Command | Description |
+|---|---|
+| **Open Panel** | Full settings UI — providers, models, keys, config |
+| **Set API Key** | Store a provider API key in OS keychain |
+| **Clear API Key** | Remove a provider's API key |
+| **Add Provider** | Step-by-step wizard |
+| **Remove Provider** | Cascade deletes provider + models + key |
+| **Add Model** | Step-by-step form with dropdowns |
+| **Remove Model** | Pick a model to remove |
+| **Open Settings** | Jump to raw JSON settings |
+| **Show Logs** | Open the output channel |
+| **Open Dumps Folder** | Reveal request dumps in Finder |
+
+---
+
+## Architecture
 
 ```
-┌──────────────────────────────────────────┐
-│          Copilot Chat (VS Code)            │
-└────────────────┬─────────────────────────┘
-                 │ LanguageModelChatProvider
-┌────────────────▼─────────────────────────┐
-│  conduit/copilot-bridge.ts                 │
-│  model → family → provider config + key   │
-│  Tool stabilization (opt‑in)              │
-└────────────────┬─────────────────────────┘
-                 │ Engine SPI
-┌────────────────▼─────────────────────────┐
-│  mesh/pipeline.ts  (AOP Chain)             │
-│  ┌───────────────┐ ┌──────────────┐       │
-│  │RateLimitGuard │→│ ErrorWarden  │→      │
-│  │ 429 retry×3   │ │ HTTP+net map │       │
-│  └───────────────┘ └──────────────┘       │
-│  ┌───────────────┐                        │
-│  │  DiagTracer   │  fingerprint·dump      │
-│  └───────────────┘                        │
-└────────────────┬─────────────────────────┘
-                 │
-┌────────────────▼─────────────────────────┐
-│  mesh/discovery.ts  (Provider Registry)    │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐  │
-│  │ openai   │ │ ollama   │ │ lmstudio │  │
-│  │ SSE      │ │ SSE      │ │ SSE      │  │
-│  └──────────┘ └──────────┘ └──────────┘  │
-└──────────────────────────────────────────┘
+Copilot Chat (VS Code)
+       │
+       ▼
+  CopilotBridge
+  Model → family → provider config + key → engine
+  Vision fallback, prompt templates, tool stabilization
+       │
+       ▼
+  Pipeline (Interceptor Chain)
+  RateLimitGuard → ErrorWarden → DiagTracer
+       │
+       ▼
+  ProviderDiscovery (Engine Registry)
+  OpenAIEngine (OpenAI-compat) | AnthropicEngine (native Messages API)
+       │
+       ▼
+  Provider API
 ```
 
 ### Design Patterns
 
-| Pattern | Implementation |
+| Pattern | Where |
 |---|---|
-| **SPI (Service Provider Interface)** | `mesh/contract.ts` — `Engine` interface. Every backend implements it. |
-| **IoC (Inversion of Control)** | `kernel/context.ts` — single bootstrapper wires all services. |
-| **AOP (Aspect‑Oriented)** | `mesh/pipeline.ts` — interceptor chain wraps every engine call. |
-| **Factory** | `mesh/discovery.ts` — register engines by family, lookup at runtime. |
-| **Strategy** | Per‑family `ProviderConfig` with optional `modelAlias` translations. |
+| **SPI** | `Engine` interface — every backend implements it |
+| **IoC** | `Context` — single bootstrapper wires all services |
+| **AOP** | `Pipeline` — interceptor chain wraps every engine call |
+| **Factory** | `ProviderDiscovery` — register engines, lookup at runtime |
+| **Strategy** | Per-family `ProviderConfig` with optional model aliases |
 
 ---
 
-## ⚙️ Settings Reference
+## Developer Guide
 
-All settings are under the `copilot-adapter-kit` prefix.
-
-### `copilot-adapter-kit.providers`
-
-```jsonc
-{
-  "copilot-adapter-kit.providers": {
-    "openai": {
-      "baseUrl": "https://api.openai.com/v1",   // Required: API endpoint
-      "modelAlias": {                            // Optional: picker-id → API model name
-        "gpt-4o": "gpt-4o-2024-08-06"
-      }
-    }
-  }
-}
-```
-
-Each key under `providers` is a **family name**. It must match the `family` field in your model definitions and the engine registered in `ProviderDiscovery`.
-
-- `baseUrl` — The API endpoint (e.g. `https://api.openai.com/v1`).
-- `name` — Friendly display name (shown as label with family as colored chip).
-- `defaultApiPath` — Default API path. Default: `/chat/completions`.
-- `modelApiPaths` — Per‑model path overrides (e.g. `{"codex-5.3": "/responses"}`).
-
-### `copilot-adapter-kit.models`
-
-Array of custom model definitions. See [Manage Models](#-manage-models) for the full schema.
-
-### `copilot-adapter-kit.maxTokens`
-
-```jsonc
-{ "copilot-adapter-kit.maxTokens": 4096 }
-```
-
-Maximum output tokens sent to the provider. `0` (default) means no limit — the provider's default applies.
-
-### `copilot-adapter-kit.logLevel`
-
-```jsonc
-{ "copilot-adapter-kit.logLevel": "quiet" }   // Default: no output channel
-{ "copilot-adapter-kit.logLevel": "meta"  }   // Log request fingerprints & diffs
-{ "copilot-adapter-kit.logLevel": "dump"  }   // meta + write request payloads to disk
-```
-
-View logs: `Cmd+Shift+P → "Copilot Adapter Kit: Show Logs"`.  
-View dumps: `Cmd+Shift+P → "Copilot Adapter Kit: Open Dumps Folder"`.
-
-### `copilot-adapter-kit.stabilizeTools`
-
-```jsonc
-{ "copilot-adapter-kit.stabilizeTools": true }
-```
-
-⚠️ **Experimental.** Pre‑activates VS Code tool activators to lock the tools array across conversation turns. Helps maintain cache prefix stability. If you see "tool list is unstable" warnings, enable this.
-
-### `copilot-adapter-kit.hiddenCustomModels`
-
-Managed automatically by the Panel UI when you hide custom models. No JSON editing needed.
-
----
-
-## ⌨️ Commands Reference
-
-| Command | ID | Description |
-|---|---|---|
-| **Open Panel** | `copilot-adapter-kit.openPanel` | 🎨 Form UI — providers, models, keys, config, danger zone |
-| **Configure** | `copilot-adapter-kit.configure` | QuickPick wizard — max tokens, log level, etc. |
-| **Add Provider** | `copilot-adapter-kit.addProvider` | Step‑by‑step form — family, friendly name, base URL |
-| **Remove Provider** | `copilot-adapter-kit.removeProvider` | Cascade deletes provider + all its models + keys |
-| **Add Model** | `copilot-adapter-kit.addModel` | 8‑step form with dropdowns — id, name, family, context, vision, thinking, tools |
-| **Remove Model** | `copilot-adapter-kit.removeModel` | Pick a model to remove |
-| **Set API Key** | `copilot-adapter-kit.setApiKey` | Store per‑provider API key in OS keychain |
-| **Clear API Key** | `copilot-adapter-kit.clearApiKey` | Remove a provider's API key |
-| **Open Settings** | `copilot-adapter-kit.openSettings` | Jump to raw JSON settings editor |
-| **Show Logs** | `copilot-adapter-kit.showLogs` | Open the "Copilot Adapter Kit" output channel |
-| **Open Dumps Folder** | `copilot-adapter-kit.openDumps` | Reveal the request dump directory in Finder |
-
-Click **$(plug) CAK** in the status bar to open the panel. All commands also available under `Copilot Adapter Kit:` in the Command Palette (`Cmd+Shift+P`).
-
----
-
-## 🛡️ Interceptors
-
-Every request passes through a chain of interceptors — middleware that can inspect, modify, or short‑circuit the stream. Think of it as Express‑style middleware for LLM calls.
-
-### RateLimitGuard — 429 Auto‑Retry
-
-- Catches HTTP 429 responses from the provider
-- Parses `"try again in Xs"` from the response body
-- Shows a thinking block with wait time: *"Rate limited. Retrying in 10s... (1/3)"*
-- Retries up to **3 times** with the full request
-- If the `Retry-After` header or body is missing, defaults to 10s
-
-### ErrorWarden — Friendly Error Messages
-
-Maps raw error codes to actionable user messages:
-
-| Error | Message |
-|---|---|
-| 401 | "Invalid API key. Run Set API Key." |
-| 402 | "Insufficient balance. Top up your account." |
-| 500/502/503 | "Provider server error. Retry shortly." |
-| `ENOTFOUND` | "DNS lookup failed. Check network/firewall." |
-| `ECONNREFUSED` | "Connection refused. Verify baseUrl and service status." |
-| `ETIMEDOUT` | "Connection timed out. Service may be overloaded." |
-| `CERT_HAS_EXPIRED` | "TLS verification failed. Check certificate." |
-| `ECONNRESET` | "Connection interrupted. Check network stability." |
-
-All errors include a collapsible `<details>` block with raw response text for debugging.
-
-### DiagTracer — Request Diagnostics
-
-At `logLevel: meta`:
-- Logs each request: model, message count, tool count
-- Computes a **fingerprint** (message structure hash) and diffs against the previous request
-- Detects shifts in system prompt windows, user messages, and tool configuration
-- Calibrates token estimation from real usage data
-
-At `logLevel: dump`:
-- Writes the full request payload (JSON) to `$TMPDIR/copilot-adapter-kit-dumps/`
-- Writes the system prompt separately as `.sys.txt` for easy inspection
-
----
-
-## 👨‍💻 Developer Guide
+### Prerequisites
 
 ```bash
-nvm use 22             # Requires Node ≥22
-npm install            # Install dependencies
-npm run watch          # Compile in watch mode
+nvm use 22           # Node ≥22
+npm install           # Install dependencies
+npm run watch         # Compile + watch
 ```
 
 ### Project Structure
 
 ```
-copilot-adapter-kit/
-├── src/
-│   ├── entry.ts                   # VS Code activate/deactivate
-│   ├── kernel/                    # IoC container & configuration
-│   │   ├── context.ts             # ApplicationContext — boots all services
-│   │   ├── vault.ts               # Per-family key storage (OS keychain)
-│   │   └── tuning.ts              # Settings facade
-│   ├── mesh/                      # Engine SPI & pipeline
-│   │   ├── contract.ts            # Engine, Payload, StreamEvents interfaces
-│   │   ├── discovery.ts           # Provider registry (register engines here)
-│   │   ├── pipeline.ts            # AOP interceptor chain
-│   │   └── engines/
-│   │       └── openai/
-│   │           ├── openai-engine.ts   # OpenAI SSE stream implementation
-│   │           └── wire-format.ts     # VS Code messages → OpenAI JSON
-│   ├── conduit/                   # VS Code API integration
-│   │   ├── copilot-bridge.ts      # LanguageModelChatProvider impl
-│   │   └── model-catalog.ts       # Model registry + user model loader
-│   ├── crosscut/                  # Interceptors (cross-cutting concerns)
-│   │   ├── rate-limit-guard.ts    # 429 retry with thinking block
-│   │   ├── error-warden.ts        # HTTP + network error → friendly text
-│   │   ├── diag-tracer.ts         # Request logging, fingerprinting, dumps
-│   │   ├── insight-engine.ts      # Request fingerprint hashing & diff
-│   │   └── tool-stabilizer.ts     # Tool pre-activation stabilizer
-│   └── tooling/                   # Utility classes
-│       └── token-math.ts          # Approximate token counting
-├── package.json
-├── tsconfig.json
-└── README.md
+src/
+├── entry.ts                          # VS Code activate/deactivate
+├── kernel/
+│   ├── context.ts                    # IoC container — boots everything
+│   ├── vault.ts                      # OS keychain per-family API keys
+│   ├── tuning.ts                     # Typed settings accessors (providers, models, visionFallback, prompts)
+│   └── families.ts                   # 13 provider family presets with default URLs
+├── conduit/
+│   ├── copilot-bridge.ts             # LanguageModelChatProvider — main request handler
+│   ├── model-catalog.ts              # Model metadata registry + VS Code capability reporting
+│   └── replay.ts                     # Chain-of-thought stash/replay for thinking models
+├── mesh/
+│   ├── contract.ts                   # Engine SPI, Payload, Envelope, StreamEvents, ToolDef
+│   ├── discovery.ts                  # Provider registry (AnthropicEngine + OpenAIEngine × families)
+│   ├── pipeline.ts                   # AOP interceptor chain (RateLimitGuard → ErrorWarden → DiagTracer)
+│   └── engines/
+│       ├── anthropic/
+│       │   ├── anthropic-engine.ts   # Native Anthropic Messages API — SSE streaming
+│       │   └── anthropic-wire-format.ts  # Envelope[] → Anthropic request (system, tool_use, tool_result)
+│       └── openai/
+│           ├── openai-engine.ts      # OpenAI Chat Completions — SSE streaming (used by 12 families)
+│           └── openai-wire-format.ts # VS Code messages → OpenAI JSON (forgeEnvelopes, forgeTools)
+├── crosscut/
+│   ├── rate-limit-guard.ts           # 429 auto-retry ×3 with thinking block progress
+│   ├── error-warden.ts               # HTTP + network error → friendly chat messages
+│   ├── diag-tracer.ts                # Request logging, fingerprinting, JSON dumps, vision audit
+│   ├── insight-engine.ts             # Request fingerprint hashing & diff detection
+│   └── tool-stabilizer.ts            # Tool pre-activation to lock tools array across turns
+├── panel/
+│   └── SettingsPanel.ts              # Webview panel — builds state + handles config save messages
+└── tooling/
+    └── token-math.ts                 # Approximate token counting
+media/
+└── settings-panel.html               # Full settings UI — Providers, Models, Keys, Config, Dumps, Danger Zone
 ```
+
+### Key Concepts
+
+**CopilotBridge** (`conduit/copilot-bridge.ts`) — the single `LanguageModelChatProvider` VS Code sees. Flow:
+
+1. Resolves selected model → metadata (`ModelMeta`) + family
+2. Loads provider config (base URL) and API key from the vault
+3. Applies custom system prompt and user message template if configured
+4. Detects image parts → runs vision fallback if configured (global or per-model)
+5. Builds the abstract `Payload` (Envelope[] + ToolDef[])
+6. Runs it through the interceptor pipeline to the engine
+7. Streams tokens, thinking blocks, and tool calls back to VS Code
+8. Stashes chain-of-thought for thinking models on completion
+
+**ModelCatalog** (`conduit/model-catalog.ts`) — loads user-defined models from `copilot-adapter-kit.models`. Reports capabilities to VS Code:
+- `imageInput: true` when: model supports images natively, OR per-model `visionFallback` is set, OR global `visionFallbackModel` is set
+- `imageInput: false` only when no fallback is configured → VS Code shows native warning
+
+**Settings Panel** (`panel/SettingsPanel.ts` + `media/settings-panel.html`) — full webview UI with tabs:
+- **Providers** — add/edit/remove provider endpoints with family presets (auto-fills default URLs)
+- **Models** — add/edit/remove models; fields for id, name, family, context window, API path, vision, thinking, tools, pricing, per-model vision fallback
+- **Keys** — set/clear API keys per provider, stored in OS keychain
+- **Configuration** — log level, vision fallback model (grouped dropdown: Copilot + CAK models), always-preprocess toggle, system prompt, user prompt template, tool stabilization
+- **Request Dumps** — list of saved JSON payloads from `dump` log level
+- **Danger Zone** — reset all settings, hide built-in models
+
+**Vision Fallback Flow:**
+
+```
+User attaches image
+        │
+        ▼
+VS Code checks imageInput capability (set by ModelCatalog)
+  ─ true → image reaches bridge
+  ─ false → VS Code blocks image at UI level
+        │
+        ▼
+Bridge: _hasImageParts() detects image parts
+        │
+        ▼
+shouldFallback = hasImages && hasFallbackModel && (visionFallbackAlways || !modelSupportsImages)
+        │
+        ▼
+_applyVisionFallback() routes each image:
+  ─ copilot:* → _describeViaCopilot() (native vscode.lm.selectChatModels)
+  ─ family:* → _describeViaEngine() (routes through CAK engine, non-streamed)
+        │
+        ▼
+Image replaced with text description in message payload
+        │
+        ▼
+Primary model receives text-only messages
+```
+
+**Thinking Stash/Replay:**
+
+When a thinking model responds, chain-of-thought is captured and packed as a binary `x-cak/chain` message part (magic header + compressed payload). On the next turn, `openai-wire-format.ts` detects the stash via `unpackStash()` and injects `reasoning_content` into the API payload. Preserves reasoning context across conversation turns.
 
 ### Adding a New Engine
 
-The `Engine` SPI is the only contract you need to implement. Here's how to add a new provider (e.g., Anthropic):
+Two approaches depending on the provider's API:
 
-**1. Implement the `Engine` interface**
+**OpenAI-compatible** (Groq, Fireworks, Together, DeepSeek, Ollama, LM Studio, etc.) — no code needed. Just add a family in `families.ts` and it auto-routes through `OpenAIEngine`.
 
+**Non-OpenAI API** (example: native Anthropic) — implement the `Engine` SPI:
+
+1. **Create wire format** in `src/mesh/engines/{family}/{family}-wire-format.ts`:
 ```typescript
-// src/mesh/engines/anthropic/anthropic-engine.ts
+export function toMyApiRequest(payload: Payload): MyApiRequest {
+  // Convert abstract Envelope[] + ToolDef[] → provider-specific JSON
+}
+```
+
+2. **Create engine** in `src/mesh/engines/{family}/{family}-engine.ts`:
+```typescript
 import { Engine, Payload, StreamEvents } from '../../contract';
 
-export class AnthropicEngine implements Engine {
-  readonly family = 'anthropic';
-  private baseUrl = '';
-  private apiKey = '';
-
-  configure(endpoint: string, key: string): void {
-    this.baseUrl = endpoint;
-    this.apiKey = key;
-  }
-
+export class MyEngine implements Engine {
+  readonly family = 'myfamily';
+  configure(endpoint: string, key: string): void { ... }
   async stream(req: Payload, sink: StreamEvents, signal?: AbortSignal): Promise<void> {
-    // Translate Payload → Anthropic Messages API format
-    // Call fetch(), handle streaming, emit onToken/onToolSignal/onComplete
-    // On error: sink.onFault(error)
+    // Call toMyApiRequest(req), fetch(), stream SSE, emit sink events
   }
 }
 ```
 
-**2. Register the engine**
-
+3. **Register** in `src/mesh/discovery.ts`:
 ```typescript
-// src/mesh/discovery.ts
-import { AnthropicEngine } from './engines/anthropic/anthropic-engine';
-
-export class ProviderDiscovery {
-  constructor() {
-    this.register(new OpenAIEngine());
-    this.register(new AnthropicEngine());   // ← Add here
-  }
-}
+this.register(new MyEngine());
 ```
 
-**3. Add built‑in models (optional)**
-
-```typescript
-// src/conduit/model-catalog.ts
-export const BUILTIN_CATALOG: ModelMeta[] = [
-  // ...existing...
-  { id: 'claude-opus', name: 'Claude Opus 4', family: 'anthropic',
-    version: 'claude-opus-4', detail: 'Most capable Anthropic model',
-    maxIn: 200000, maxOut: 16384, image: true, thinking: true, toolCalling: 128 },
-];
-```
-
-**4. Users configure it**
-
-```jsonc
-{
-  "copilot-adapter-kit.providers": {
-    "anthropic": { "baseUrl": "https://api.anthropic.com" }
-  }
-}
-```
-
-That's it. The pipeline, interceptors, key management, and model picker all work automatically for the new family.
+4. **Add family preset** in `src/kernel/families.ts` (optional).
 
 ### Adding a New Interceptor
 
-Implement the `Interceptor` interface and register it in `Context.bootstrap()`:
-
 ```typescript
-// src/crosscut/my-interceptor.ts
 import type { Interceptor } from '../mesh/pipeline';
 
 export class MyInterceptor implements Interceptor {
   async intercept(payload, engine, sink, signal, next) {
-    // BEFORE: inspect/modify payload or sink
-    console.log('request:', payload.model);
-
-    await next();  // Call the next interceptor (or the engine)
-
-    // AFTER: the stream has completed
+    await next();  // Call the chain
   }
 }
 ```
 
-```typescript
-// src/kernel/context.ts
-import { MyInterceptor } from '../crosscut/my-interceptor';
-
-static async bootstrap(ext: vscode.ExtensionContext): Promise<Context> {
-  // ...
-  ctx.pipeline.use(ctx.rateLimitGuard);
-  ctx.pipeline.use(ctx.errorWarden);
-  ctx.pipeline.use(new MyInterceptor());   // ← Add here
-  ctx.pipeline.use(ctx.tracer);
-  // ...
-}
-```
-
-Interceptors run in registration order. `RateLimitGuard` and `ErrorWarden` wrap `sink.onFault` to intercept errors — `DiagTracer` wraps lifecycle events for observability.
+Register in `Context.bootstrap()`: `ctx.pipeline.use(new MyInterceptor());`
 
 ### Key Design Decisions
 
-- **No shared API key.** Each family gets its own key in the OS keychain (`copilot-adapter-kit.apiKey.{family}`). There is no fallback key.
-- **No engine discovery from config.** Engines are compile‑time registered in `ProviderDiscovery`. The config only provides endpoint + key. This keeps the SPI surface small and prevents arbitrary code execution.
-- **Error reporting is inline, not thrown.** The bridge reports errors as `LanguageModelTextPart` so the user sees a formatted message in chat rather than a red error banner.
-- **Thinking blocks use `LanguageModelThinkingPart`** (proposed API) with ID `'cak-thinking'` for the glow animation in VS Code Insiders.
-- **All interceptors use async chains fully awaited.** This is critical for 429 retry — missing an `await` means the guard fires after the response is already returned.
+- **Two-engine architecture.** `AnthropicEngine` for native Anthropic Messages API; `OpenAIEngine` for all 12 OpenAI-compatible families. Both implement the same `Engine` SPI.
+- **Abstract wire format.** Bridge produces abstract `Envelope[]` + `ToolDef[]`; each engine's wire format translates to provider-specific JSON.
+- **Per-family API keys** in OS keychain. No shared keys, no fallback.
+- **Compile-time engine registration.** Engines registered in `ProviderDiscovery`, not from config. Prevents arbitrary code execution.
+- **Inline error reporting.** Errors rendered as `LanguageModelTextPart` in chat, not thrown as exceptions.
+- **Thinking blocks** use `LanguageModelThinkingPart` (proposed API) with ID `cak-thinking`.
+- **Fully awaited async interceptor chains.** Critical for 429 retry correctness.
 
 ---
 
-## 🔧 Troubleshooting
+## Settings Reference
 
-<details>
-<summary><strong>"No API key configured" warning</strong></summary>
+All settings under `copilot-adapter-kit.*`.
 
-Run `Cmd+Shift+P → "Copilot Adapter Kit: Set API Key"`, pick the provider, and paste your key. Keys are stored per‑family — make sure you set the key for the correct provider.
-</details>
-
-<details>
-<summary><strong>"No baseUrl configured for provider" error</strong></summary>
-
-Add the provider to `copilot-adapter-kit.providers` in your `settings.json`:
+### `providers`
 
 ```jsonc
 {
   "copilot-adapter-kit.providers": {
-    "ollama": { "baseUrl": "http://localhost:11434/v1" }
+    "openai": {
+      "baseUrl": "https://api.openai.com/v1",
+      "name": "My OpenAI",
+      "defaultApiPath": "/chat/completions",
+      "modelApiPaths": { "codex-5.3": "/responses" },
+      "modelAlias": { "gpt-4o": "gpt-4o-2024-08-06" },
+      "visionFallback": "openai:gpt-5.2"
+    }
   }
 }
 ```
-</details>
 
-<details>
-<summary><strong>Ollama connection refused</strong></summary>
+### `models`
 
-Make sure Ollama is running:
-```bash
-curl http://localhost:11434/v1/models
-```
+Array of model definitions. See [Models](#models) section for schema.
 
-If not, start it: `ollama serve`
-</details>
+### `visionFallbackModel`
 
-<details>
-<summary><strong>LM Studio connection refused</strong></summary>
+Global vision fallback model. Format: `family:modelId` or just `modelId`. Empty = disabled.
 
-Make sure the LM Studio local server is started:
-1. Open LM Studio → Developer tab (or Local Server)
-2. Load your model
-3. Click "Start Server"
-4. Verify: `curl http://localhost:1234/v1/models`
-</details>
+### `visionFallbackAlways`
 
-<details>
-<summary><strong>429 Rate Limit errors</strong></summary>
+Default: `false`. When `true`, always preprocess images through fallback regardless of model's `image` flag.
 
-CAK auto‑retries up to 3 times. If you still see 429s:
-- Reduce request rate (fewer parallel chats)
-- Upgrade your provider tier
-- For local models, 429 shouldn't happen — check your proxy configuration
-</details>
+### `maxTokens`
 
-<details>
-<summary><strong>Model not showing in picker</strong></summary>
+Max output tokens. `0` = no limit (provider default applies).
 
-1. Make sure the model's `family` matches a key in `copilot-adapter-kit.providers`
-2. Make sure you've set an API key for that family
-3. Run `Cmd+Shift+P → "Developer: Reload Window"` to refresh the picker
-</details>
+### `logLevel`
+
+`quiet` (default), `meta`, or `dump`.
+
+### `stabilizeTools`
+
+Default: `false`. Pre-activates tools to stabilize the tools array.
+
+### `systemPrompt`
+
+Custom system prompt template. Placeholders: `{model}`, `{date}`, `{tools}`, `{cakVersion}`.
+
+### `userPromptTemplate`
+
+User message wrapper. Use `{userMessage}` placeholder.
+
+### `hiddenCustomModels`
+
+Managed by the Panel UI when you hide models. No JSON editing needed.
 
 ---
 
-## 🤝 Contributing
+## Troubleshooting
 
-Issues and PRs are welcome. Before adding a new engine, please read the [Adding a New Engine](#adding-a-new-engine) section. The SPI is intentionally small — keep engine implementations self‑contained in `src/mesh/engines/{family}/`.
+### "Model does not support images" warning in chat
+
+VS Code shows this when `imageInput: false`. CAK reports `imageInput: true` if a vision fallback is configured. If you still see this:
+- Set a vision fallback model (global or per-model)
+- Reload the extension host after changes
+
+### Image sends but model returns errors
+
+Check that your vision fallback model actually supports images. If it's also text-only, CAK shows `[image — vision fallback failed]` in the response. Use a known vision-capable model as fallback (e.g. `copilot:gpt-5.2` or `openai:gpt-5.2`).
+
+### Model not showing in picker
+
+1. Model's `family` must match a key in `providers`
+2. API key must be set for that family
+3. Reload window after adding
+
+### "No API key configured" warning
+
+Run `Copilot Adapter Kit: Set API Key` and select the provider.
+
+### "No baseUrl configured" error
+
+Add the provider to `copilot-adapter-kit.providers` with a valid `baseUrl`.
+
+### 429 Rate Limit
+
+CAK auto-retries 3 times with exponential backoff. If it persists, reduce request frequency or upgrade your provider tier.
+
+### Connection refused (Ollama/LM Studio)
+
+Verify the local server is running:
+```bash
+curl http://localhost:11434/v1/models   # Ollama
+curl http://localhost:1234/v1/models    # LM Studio
+```
 
 ---
 
 ## License
 
 MIT © [salilvnair](https://github.com/salilvnair)
-
----
-
-## 📦 Publishing
-
-```bash
-npm run compile          # Build TypeScript → out/
-npm run logo             # Generate icon font from resources/cak-icon-src.svg
-npm run package          # Create .vsix file
-```
-
-### Quick publish
-
-```bash
-npm run publish          # Publish to marketplace
-npm run publish:patch    # Auto‑bump patch version + publish
-npm run publish:minor    # Auto‑bump minor version + publish
-```
-
-### Manual upload
-
-1. Go to [marketplace.visualstudio.com/manage](https://marketplace.visualstudio.com/manage)
-2. Click **New Extension** → upload the `.vsix`
-
-### Prerequisites
-
-- Node ≥22 (use `nvm use 22`)
-- `"publisher": "salilvnair"` matches marketplace publisher ID
-- `resources/icon.png` — extension icon (also used in panel header)
-- `resources/cak-icons.woff` — custom icon font for status bar `$(cak-icon)`
-- `.vscodeignore` excludes `src/`, `node_modules/`, etc.
-
-| Provider | Family | `baseUrl` |
-|---|---|---|
-| **OpenAI** | `openai` | `https://api.openai.com/v1` |
-| **Azure OpenAI** | `openai` | `https://{res}.openai.azure.com/openai/deployments/{dep}` |
-| **Ollama** | `ollama` | `http://localhost:11434/v1` |
-| **LM Studio** | `lmstudio` | `http://localhost:1234/v1` |
-| **vLLM** | `openai` | `http://localhost:8000/v1` |
-| **Groq** | `openai` | `https://api.groq.com/openai/v1` |
-| **Together AI** | `openai` | `https://api.together.xyz/v1` |
-| **LiteLLM Proxy** | `openai` | `http://localhost:4000/v1` |
-
-Providers with non‑OpenAI APIs (Anthropic, Google) need a custom engine — see the Anthropic example above.
-
----
-
-## 📄 License
-
-MIT · Copyright © 2026 [salilvnair](https://github.com/salilvnair)

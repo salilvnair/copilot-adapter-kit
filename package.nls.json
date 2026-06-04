@@ -15,6 +15,10 @@
   "copilot-adapter-kit.config.maxTokens": "Max output tokens per request. 0 = unlimited.",
   "copilot-adapter-kit.config.stabilizeTools": "Experimental: lock tool configurations to improve cache hit rates. Pre-activates all available VS Code tools so the tools array stays identical across turns — each subsequent request reuses cached context. \n\n⚠️ Requests include more function definitions — input tokens increase. Cached tokens are cheaper but still count toward usage. \n\n- 64 or fewer enabled tools: usually stable — leave this off. \n- More than 128 tools: not supported. Disable unused tools. \n- May inject internal activation calls into chat history. Start a new chat if switching models behaves unexpectedly. \n\nUse Configure Tools (workbench.action.chat.configureTools) to manage your tool list.",
   "copilot-adapter-kit.config.logLevel": "quiet = token counts | meta = hashes + cache trace | dump = full request payloads",
+  "copilot-adapter-kit.config.visionFallbackModel": "Model ID to use for vision/image description when the selected model doesn't support images. Leave empty to disable. Format: family:modelId (e.g. openai:gpt-5.2) or just modelId.",
+  "copilot-adapter-kit.config.visionFallbackAlways": "If enabled, always preprocess image input through the configured vision fallback model when one is set. Recommended for providers that reject image parts.",
+  "copilot-adapter-kit.config.systemPrompt": "Custom system prompt template. Supports placeholders: {model}, {date}, {tools}, {cakVersion}. Leave empty to use Copilot's default. Example: \"You are {model}, a helpful coding assistant. Today is {date}.\"",
+  "copilot-adapter-kit.config.userPromptTemplate": "Custom user prompt wrapper template. Use {userMessage} placeholder for the actual user input. Leave empty for no wrapping. Example: \"[CONTEXT]\\n\\n{userMessage}\\n\\n[/CONTEXT]\"",
   "copilot-adapter-kit.config.models": "Add custom models. Each entry needs id and family. Matches providers by family name.",
 
   "copilot-adapter-kit.config.hiddenBuiltins": "Specific built-in model IDs to hide from the picker. Use the Open Panel UI to manage this visually.",

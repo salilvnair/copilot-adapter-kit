@@ -1,13 +1,13 @@
 // ApplicationContext — IoC container. Every service resolves from here.
 import vscode from 'vscode';
-import { Vault } from './vault';
-import { Tuning } from './tuning';
+import { CopilotBridge } from '../conduit/copilot-bridge';
+import { DiagTracer } from '../crosscut/diag-tracer';
+import { ErrorWarden } from '../crosscut/error-warden';
+import { RateLimitGuard } from '../crosscut/rate-limit-guard';
 import { ProviderDiscovery } from '../mesh/discovery';
 import { InterceptorPipeline } from '../mesh/pipeline';
-import { CopilotBridge } from '../conduit/copilot-bridge';
-import { RateLimitGuard } from '../crosscut/rate-limit-guard';
-import { ErrorWarden } from '../crosscut/error-warden';
-import { DiagTracer } from '../crosscut/diag-tracer';
+import { Tuning } from './tuning';
+import { Vault } from './vault';
 
 export class Context {
   readonly vault: Vault;
@@ -45,6 +45,11 @@ export class Context {
         if (e.key.startsWith('copilot-adapter-kit.apiKey')) ctx.bridge.signal();
       }),
     );
+
+    // Defer signal so VS Code has time to register the provider before we
+    // announce model availability. Without this, models only appear after
+    // the user manually triggers a config change or clicks the status bar.
+    setTimeout(() => ctx.bridge.signal(), 100);
 
     ctx.tracer.info(`copilot-adapter-kit online — ${ctx.discovery.count()} engine(s) registered`);
     return ctx;

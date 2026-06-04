@@ -4,6 +4,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import vscode from 'vscode';
 import { BUILTIN_CATALOG } from '../conduit/model-catalog';
+import { KNOWN_FAMILIES } from '../kernel/families';
 
 export class SettingsPanel {
   static current: SettingsPanel | undefined;
@@ -120,12 +121,32 @@ export class SettingsPanel {
     const hiddenBuiltins: string[] = config.get<string[]>('hiddenBuiltins') || [];
     const modelOverrides: Record<string, any> = config.get<Record<string, any>>('modelOverrides') || {};
     const hiddenCustomModels: string[] = config.get<string[]>('hiddenCustomModels') || [];
+    const visionFallbackModel: string = config.get<string>('visionFallbackModel', '');
+    const visionFallbackAlways: boolean = config.get<boolean>('visionFallbackAlways', false);
+    const systemPrompt: string = config.get<string>('systemPrompt', '');
+    const userPromptTemplate: string = config.get<string>('userPromptTemplate', '');
 
     // Merge overrides into built-in models
     const builtinModels = BUILTIN_CATALOG.map(m => {
       const ov = modelOverrides[m.id];
       return ov ? { ...m, ...ov } : m;
     });
+
+    // Discover ALL registered chat models (Copilot + CAK + any other provider).
+    // Empty filter {} = query everything — same approach ck8t uses.
+    let copilotModels: { id: string; name: string; family: string; vendor: string; image: boolean }[] = [];
+    try {
+      const all = await vscode.lm.selectChatModels({});
+      copilotModels = all.map(m => ({
+        id: m.id, name: m.name, family: m.family,
+        vendor: (m as any).vendor || m.family,
+        image: (m as any).capabilities?.imageInput ?? true,
+      }));
+    } catch {
+      copilotModels = [
+        { id: 'auto', name: 'Auto', family: 'copilot', vendor: 'copilot', image: true },
+      ];
+    }
 
     // Per-family keys — only check the registered families
     const keys: Record<string, boolean> = {};
@@ -140,8 +161,9 @@ export class SettingsPanel {
       type: 'state',
       payload: {
         providers, models, maxTokens, logLevel, stabilizeTools, hiddenBuiltins, hiddenCustomModels, modelOverrides, keys,
-        builtinModels,
-        engineFamilies: ['openai'], // only families with registered engines
+        visionFallbackModel, visionFallbackAlways, systemPrompt, userPromptTemplate,
+        builtinModels, copilotModels,
+        engineFamilies: KNOWN_FAMILIES.map(f => ({ family: f.family, label: f.label, defaultUrl: f.defaultUrl, desc: f.desc })),
       },
     });
   }

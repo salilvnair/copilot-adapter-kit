@@ -1,10 +1,12 @@
 // WireFormat: VS Code messages → OpenAI-compatible JSON payload
 import vscode from 'vscode';
-import type { Envelope, ContentFragment, ToolSignal, ToolDef } from '../../contract';
+import { unpackStash } from '../../../conduit/replay';
+import type { ContentFragment, Envelope, ToolDef, ToolSignal } from '../../contract';
 
 export function forgeEnvelopes(
   msgs: readonly vscode.LanguageModelChatRequestMessage[],
   attachmentMode: boolean,
+  isThinkingModel = false,
 ): Envelope[] {
   const out: Envelope[] = [];
 
@@ -35,6 +37,11 @@ export function forgeEnvelopes(
       if (text || calls.length) {
         const e: Envelope = { role: 'assistant', content: text || '' };
         if (calls.length) e.tool_calls = calls;
+        // Unpack stashed chain-of-thought from a prior turn — only for thinking models
+        if (isThinkingModel) {
+          const stash = unpackStash(src);
+          if (stash.ok && stash.chain) e.reasoning_content = stash.chain;
+        }
         out.push(e);
       }
     } else if (text || hasAttach) {

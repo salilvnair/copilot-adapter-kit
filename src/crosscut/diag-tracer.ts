@@ -46,6 +46,9 @@ export class DiagTracer implements Interceptor {
     insight.commit(print);
 
     ch().info(`[req ${hash}] model=${payload.model} msgs=${payload.messages?.length} tools=${payload.tools?.length ?? 0}`);
+    if (payload._visionFallback) {
+      ch().info(`[req ${hash}] vision-fallback → ${payload._visionFallback.family}:${payload._visionFallback.model}`);
+    }
     if (diff) {
       ch().info(`[req ${hash}] ${diff.summaryLine}`);
       for (const line of diff.detailLines) ch().info(`[req ${hash}] detail: ${line}`);
@@ -85,6 +88,10 @@ export class DiagTracer implements Interceptor {
     const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
     if (config.get<string>('logLevel') === 'dump') {
       const dumpData: any = { payload, tools: payload.tools };
+      // Audit: include vision fallback metadata if present
+      if (payload._visionFallback) {
+        dumpData._visionFallback = payload._visionFallback;
+      }
       this._writeDump(hash, dumpData).catch(() => {});
     }
 
@@ -119,6 +126,11 @@ export class DiagTracer implements Interceptor {
     if (data.error) {
       const errFile = join(root, `req-${ts}-${hash}.error.json`);
       await writeFile(errFile, JSON.stringify(data.error, null, 2), 'utf-8');
+    }
+    // Write vision fallback audit separately
+    if (data._visionFallback) {
+      const vfFile = join(root, `req-${ts}-${hash}.vision-fallback.json`);
+      await writeFile(vfFile, JSON.stringify(data._visionFallback, null, 2), 'utf-8');
     }
   }
 }

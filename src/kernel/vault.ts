@@ -22,10 +22,13 @@ export class Vault {
     await this.store.delete(this._key(family));
   }
 
-  /** Check if at least one provider has a key configured. */
+  /** Check if at least one configured provider has a key. */
   async present(): Promise<boolean> {
-    // Quick check: try the openai key (most common). Full scan is expensive on SecretStorage.
-    const k = await this.fetch('openai');
-    return k !== undefined && k.length > 0;
+    // Check all keys — user may not use 'openai' at all
+    const keys = await Promise.all(
+      Object.keys(vscode.workspace.getConfiguration('copilot-adapter-kit').get<Record<string, unknown>>('providers') || {})
+        .map(f => this.fetch(f))
+    );
+    return keys.some(k => k !== undefined && k.length > 0);
   }
 }
