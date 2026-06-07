@@ -1,6 +1,7 @@
 // entry.ts — SpringApplication.run()
 import vscode from 'vscode';
 import { Context } from './kernel/context';
+import { MiniGitPanel } from './panel/MiniGitPanel';
 import { SettingsPanel } from './panel/SettingsPanel';
 
 let instance: Context | undefined;
@@ -18,7 +19,7 @@ export async function activate(ext: vscode.ExtensionContext): Promise<void> {
   ext.subscriptions.push(status);
 
   ext.subscriptions.push(
-    vscode.commands.registerCommand('copilot-adapter-kit.openPanel',     () => SettingsPanel.show(ext)),
+    vscode.commands.registerCommand('copilot-adapter-kit.openPanel',     () => SettingsPanel.show(ext, ctx)),
     vscode.commands.registerCommand('copilot-adapter-kit.setApiKey',     () => _promptKey(ctx)),
     vscode.commands.registerCommand('copilot-adapter-kit.clearApiKey',   () => _clearKey(ctx)),
     vscode.commands.registerCommand('copilot-adapter-kit.addModel',      () => _addModel(ctx)),
@@ -31,6 +32,12 @@ export async function activate(ext: vscode.ExtensionContext): Promise<void> {
     vscode.commands.registerCommand('copilot-adapter-kit.showLogs',      () =>
       (vscode.window as any).showOutputChannel?.() || ctx.tracer.info('')),
     vscode.commands.registerCommand('copilot-adapter-kit.openDumps',     () => ctx.tracer.openDumpsFolder()),
+    vscode.commands.registerCommand('copilot-adapter-kit.generateCommitMessage', () => _generateCommitMessage(ext, ctx)),
+  );
+
+  // Register sidebar mini git panel
+  ext.subscriptions.push(
+    vscode.window.registerWebviewViewProvider('cak.miniGitPanel', new MiniGitPanel(ext, ctx)),
   );
 
   ctx.tracer.info(`copilot-adapter-kit v${ext.extension.packageJSON.version} activated`);
@@ -413,4 +420,9 @@ async function _configure(ctx: Context): Promise<void> {
       break;
     }
   }
+}
+
+async function _generateCommitMessage(ext: vscode.ExtensionContext, ctx: Context): Promise<void> {
+  // Open the panel — user uses the Tools tab to generate commit messages
+  SettingsPanel.show(ext, ctx);
 }

@@ -1,16 +1,21 @@
 // SettingsPanel — webview panel with Daakia-styled form UI
 // Singleton panel, opens from status bar or command palette.
+import { exec } from 'child_process';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import vscode from 'vscode';
 import { BUILTIN_CATALOG } from '../conduit/model-catalog';
 import { KNOWN_FAMILIES } from '../kernel/families';
+import { Context } from '../kernel/context';
+import type { Payload, StreamEvents } from '../mesh/contract';
 
 export class SettingsPanel {
   static current: SettingsPanel | undefined;
   private panel: vscode.WebviewPanel;
+  private ctx: Context | undefined;
 
-  private constructor(private ext: vscode.ExtensionContext) {
+  private constructor(private ext: vscode.ExtensionContext, ctx?: Context) {
+    this.ctx = ctx;
     this.panel = vscode.window.createWebviewPanel(
       'cak.settingsPanel',
       'Copilot Adapter Kit',
@@ -89,15 +94,24 @@ export class SettingsPanel {
         case 'factoryReset':
           await this._factoryReset();
           break;
+        case 'execGit':
+          await this._execGit();
+          break;
+        case 'execAndGen':
+          await this._execAndGen(msg.payload?.which, msg.payload?.family);
+          break;
+        case 'genCommitMsg':
+          await this._genCommitMsg(msg.payload?.diff, msg.payload?.family);
+          break;
       }
     });
   }
 
-  static show(ext: vscode.ExtensionContext): void {
+  static show(ext: vscode.ExtensionContext, ctx?: Context): void {
     if (SettingsPanel.current) {
       SettingsPanel.current.panel.reveal();
     } else {
-      SettingsPanel.current = new SettingsPanel(ext);
+      SettingsPanel.current = new SettingsPanel(ext, ctx);
     }
   }
 
@@ -125,6 +139,7 @@ export class SettingsPanel {
     const visionFallbackAlways: boolean = config.get<boolean>('visionFallbackAlways', false);
     const systemPrompt: string = config.get<string>('systemPrompt', '');
     const userPromptTemplate: string = config.get<string>('userPromptTemplate', '');
+    const gitPrompt: string = config.get<string>('gitPrompt', '');
 
     // Merge overrides into built-in models
     const builtinModels = BUILTIN_CATALOG.map(m => {
@@ -161,7 +176,7 @@ export class SettingsPanel {
       type: 'state',
       payload: {
         providers, models, maxTokens, logLevel, stabilizeTools, hiddenBuiltins, hiddenCustomModels, modelOverrides, keys,
-        visionFallbackModel, visionFallbackAlways, systemPrompt, userPromptTemplate,
+        visionFallbackModel, visionFallbackAlways, systemPrompt, userPromptTemplate, gitPrompt,
         builtinModels, copilotModels,
         engineFamilies: KNOWN_FAMILIES.map(f => ({ family: f.family, label: f.label, defaultUrl: f.defaultUrl, desc: f.desc })),
       },
@@ -306,5 +321,184 @@ export class SettingsPanel {
 
   private async _factoryReset(): Promise<void> {
     await this._deleteAll();
+  }
+
+  // --- Tools: Git ---
+
+  private _runGit(args: string): Promise<string> {
+    return new Promise((resolve) => {
+      const wsFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      exec(`git ${args}`, { cwd: wsFolder, maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
+        resolve(err ? '' : stdout);
+      });
+    });
+  }
+
+  private async _execGit(): Promise<void> {
+    try {
+      // --cached (compatible with all Git versions) instead of --staged
+      const staged = await this._runGit('diff --cached');
+      const unstaged = await this._runGit('diff');
+      const statusShort = await this._runGit('status --short');
+      const branch = await this._runGit('rev-parse --abbrev-ref HEAD').then(s => s.trim(), () => 'unknown');
+      const repo = await this._runGit('rev-parse --show-toplevel').then(s => s.trim().split('/').pop() || '', () => '');
+      // If branch is empty, we're likely not in a git repo
+      if (!branch && !staged && !unstaged) {
+        this.panel.webview.postMessage({ type: 'gitError', payload: 'Not a git repository (or no workspace folder open).' });
+        return;
+      }
+      this.panel.webview.postMessage({
+        type: 'gitState',
+        payload: { staged: staged.trim(), unstaged: unstaged.trim(), statusShort: statusShort.trim(), branch, repo },
+      });
+    } catch (e: any) {
+      this.panel.webview.postMessage({ type: 'gitError', payload: e.message || String(e) });
+    }
+  }
+
+  private async _execAndGen(which: string, chosenFamily?: string): Promise<void> {
+    // Fetch git diff automatically, then call _genCommitMsg
+    const diff = which === 'staged'
+      ? (await this._runGit('diff --cached')).trim()
+      : (await this._runGit('diff')).trim();
+
+    if (!diff) {
+      const branch = (await this._runGit('rev-parse --abbrev-ref HEAD')).trim();
+      if (!branch) {
+        this.panel.webview.postMessage({
+          type: 'genCommitMsgResult',
+          payload: { error: 'Not a git repository (or no workspace folder open).' },
+        });
+        return;
+      }
+      const label = which === 'staged' ? 'staged' : 'unstaged';
+      this.panel.webview.postMessage({
+        type: 'genCommitMsgResult',
+        payload: { error: `No ${label} changes. Stage some files first or make some edits.` },
+      });
+      return;
+    }
+
+    // Now generate the commit message (no gitState — user didn't click Fetch Git Status)
+    await this._genCommitMsg(diff, chosenFamily);
+  }
+
+  private async _genCommitMsg(diff: string, chosenFamily?: string): Promise<void> {
+    if (!this.ctx) {
+      this.panel.webview.postMessage({ type: 'genCommitMsgResult', payload: { error: 'Context not available.' } });
+      return;
+    }
+    const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
+    const providers = config.get<Record<string, any>>('providers') || {};
+    const families = Object.keys(providers);
+    if (!families.length) {
+      this.panel.webview.postMessage({ type: 'genCommitMsgResult', payload: { error: 'No providers configured. Add a provider first.' } });
+      return;
+    }
+    const family = (chosenFamily && providers[chosenFamily]) ? chosenFamily : families[0];
+    const provider = providers[family];
+    const providerName = provider.name || family;
+    const baseUrl = provider.baseUrl || '';
+    const apiPath = provider.defaultApiPath || '/chat/completions';
+    const key = await this.ext.secrets.get(`copilot-adapter-kit.apiKey.${family}`);
+    if (!key) {
+      this.panel.webview.postMessage({ type: 'genCommitMsgResult', payload: { error: `No API key for "${providerName}". Set it in the Keys tab.` } });
+      return;
+    }
+
+    try {
+      const engine = this.ctx.discovery.lookup(family);
+      engine.configure?.(baseUrl, key);
+
+      const branch = await this._runGit('rev-parse --abbrev-ref HEAD').then(s => s.trim(), () => 'unknown');
+      const repo = await this._runGit('rev-parse --show-toplevel').then(s => s.trim().split('/').pop() || '', () => '');
+
+      const defaultGitPrompt = `You are an expert Git commit message writer. Analyze the following git diff and generate a concise, conventional commit message (e.g., "feat: add feature X" or "fix: resolve issue Y"). 
+
+Include a short summary line (max 72 chars), followed by a blank line, then 1-3 bullet points of key changes.
+
+Branch: {branch}
+Repo: {repo}
+
+--- DIFF ---
+{diff}
+
+Generate only the commit message, nothing else.`;
+
+      const gitPromptConfig = config.get<string>('gitPrompt', '');
+      const systemPromptConfig = config.get<string>('systemPrompt', '');
+      const userTemplateConfig = config.get<string>('userPromptTemplate', '');
+
+      const resolvedPrompt = (gitPromptConfig || defaultGitPrompt)
+        .replace(/\{branch\}/g, branch)
+        .replace(/\{repo\}/g, repo)
+        .replace(/\{diff\}/g, diff);
+
+      const modelId = this.ctx.tuning.resolveModelId('auto', family);
+      // Find a suitable model from builtin catalog for this family, or fall back to first custom model
+      const builtinForFamily = BUILTIN_CATALOG.filter(m => m.family === family);
+      const customForFamily = (config.get<any[]>('models') || []).filter((m: any) => m.family === family);
+      const actualModel = builtinForFamily.length > 0 ? builtinForFamily[0].id
+        : customForFamily.length > 0 ? customForFamily[0].id
+        : modelId;
+
+      // Build messages honoring systemPrompt and userPromptTemplate from config
+      const messages: any[] = [];
+      if (systemPromptConfig) {
+        messages.push({ role: 'system', content: systemPromptConfig });
+      }
+      const userContent = userTemplateConfig
+        ? userTemplateConfig.replace(/\{userMessage\}/g, resolvedPrompt)
+        : resolvedPrompt;
+      messages.push({ role: 'user', content: userContent });
+
+      const payload: Payload = {
+        model: actualModel,
+        messages,
+        stream: true,
+        max_tokens: 512,
+        apiPath,
+      };
+
+      // Build a debug trace for the webview — show EVERYTHING so user can debug
+      const trace = [
+        `Provider:       ${providerName} (${family})`,
+        `Base URL:       ${baseUrl}${apiPath}`,
+        `Model:          ${actualModel}`,
+        `Key:            ${key.slice(0, 8)}...${key.slice(-4)}`,
+        `Branch:         ${branch}`,
+        `Repo:           ${repo}`,
+        `System Prompt:  ${systemPromptConfig ? '(' + systemPromptConfig.length + ' chars) ' + systemPromptConfig : '(none — using default)'}`,
+        `User Template:  ${userTemplateConfig ? '(' + userTemplateConfig.length + ' chars) ' + userTemplateConfig : '(none)'}`,
+        `Git Prompt Cfg: ${gitPromptConfig ? '(' + gitPromptConfig.length + ' chars) ' + gitPromptConfig : '(none — using built-in default)'}`,
+        `Final User Msg: (${userContent.length} chars) ${userContent}`,
+      ];
+
+      const wrapped = this.ctx.pipeline.wrap(engine);
+      let text = '';
+      const sink: StreamEvents = {
+        onToken: (t: string) => { text += t; },
+        onThinking: () => {},
+        onToolSignal: () => {},
+        onFault: async (e: Error) => {
+          this.panel.webview.postMessage({
+            type: 'genCommitMsgResult',
+            payload: { error: e.message, trace: trace.join('\n') },
+          });
+        },
+        onComplete: () => {
+          this.panel.webview.postMessage({
+            type: 'genCommitMsgResult',
+            payload: { text: text.trim(), trace: trace.join('\n') },
+          });
+        },
+      };
+      await wrapped.stream(payload, sink);
+    } catch (e: any) {
+      this.panel.webview.postMessage({
+        type: 'genCommitMsgResult',
+        payload: { error: e.message || String(e), trace: `Exception during ${family} call to ${baseUrl}${apiPath}` },
+      });
+    }
   }
 }

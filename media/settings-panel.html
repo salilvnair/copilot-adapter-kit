@@ -138,7 +138,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="sidebar-section" style="margin-top:4px">Tools</div>
 <div class="sidebar-tab" data-tab="json"><span class="tab-icon">{ }</span>JSON Settings</div>
 <div class="sidebar-tab" data-tab="dumps"><span class="tab-icon">📂</span>Request Dumps</div>
-<div class="sidebar-section" style="margin-top:8px">Danger</div>
+<div class="sidebar-section" style="margin-top:4px">Tools</div>
+<div class="sidebar-tab" data-tab="tools"><span class="tab-icon">🛠️</span>Git Tools</div>
+<div class="sidebar-section" style="margin-top:4px">Danger</div>
 <div class="sidebar-tab" data-tab="danger"><span class="tab-icon">⚠️</span>Danger Zone</div>
 </div>
 <div class="content" id="content"></div>
@@ -147,7 +149,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 <script>
 const vsc=acquireVsCodeApi();
-let st={providers:{},models:[],builtinModels:[],copilotModels:[],maxTokens:0,logLevel:'quiet',stabilizeTools:false,hiddenBuiltins:[],hiddenCustomModels:[],keys:{},visionFallbackModel:'',visionFallbackAlways:false,systemPrompt:'',userPromptTemplate:''};
+let st={providers:{},models:[],builtinModels:[],copilotModels:[],maxTokens:0,logLevel:'quiet',stabilizeTools:false,hiddenBuiltins:[],hiddenCustomModels:[],keys:{},visionFallbackModel:'',visionFallbackAlways:false,systemPrompt:'',userPromptTemplate:'',gitPrompt:'',gitStaged:'',gitUnstaged:'',gitStatusShort:'',gitBranch:'',gitRepo:''};
 let active='providers';
 
 // SVG icons — exact Daakia paths (24x24 viewBox, rendered at 14px)
@@ -169,7 +171,7 @@ document.getElementById('sidebar').addEventListener('click',e=>{
 
 function render(){
   const c=document.getElementById('content');
-  switch(active){case'providers':c.innerHTML=rProv();break;case'models':c.innerHTML=rMod();break;case'keys':c.innerHTML=rKeys();break;case'config':c.innerHTML=rCfg();break;case'json':c.innerHTML=rJson();break;case'dumps':c.innerHTML=rDmp();break;case'danger':c.innerHTML=rDanger();}
+  switch(active){case'providers':c.innerHTML=rProv();break;case'models':c.innerHTML=rMod();break;case'keys':c.innerHTML=rKeys();break;case'config':c.innerHTML=rCfg();break;case'json':c.innerHTML=rJson();break;case'dumps':c.innerHTML=rDmp();break;case'danger':c.innerHTML=rDanger();break;case'tools':c.innerHTML=rTools();break;}
   updBadges();rebindDD();
 }
 
@@ -343,7 +345,17 @@ function rCfg(){
     <textarea class="form-input" id="usrPrompt" rows="3" style="font-family:monospace;font-size:11px;resize:vertical;min-height:60px" placeholder="[CONTEXT]\\n\\n{userMessage}\\n\\n[/CONTEXT]">${esc(up)}</textarea>
     <div style="margin-top:6px"><button class="btn btn-sm btn-primary" onclick="svCfg('userPromptTemplate',gid('usrPrompt').value)">💾 Save</button></div></div>
   </div>
-`;}
+  <div class="card">
+    <div class="card-header">📝 Git Commit Prompt</div>
+    <div class="content-subtitle" style="margin-top:0;margin-bottom:8px">Custom prompt template for commit message generation in the Tools tab.</div>
+    <div class="form-group"><label class="form-label">Git Commit Prompt <span class="badge badge-info">git</span></label>
+    <div style="font-size:10px;color:var(--color-text-muted);margin-bottom:4px">Placeholders: <code>{diff}</code> <code>{branch}</code> <code>{repo}</code> <code>{userGuidance}</code></div>
+    <textarea class="form-input" id="gitPrompt" rows="8" style="font-family:monospace;font-size:11px;resize:vertical;min-height:120px">${esc(st.gitPrompt||'')}</textarea>
+    <div style="margin-top:6px;display:flex;gap:6px">
+      <button class="btn btn-sm btn-primary" onclick="svCfg('gitPrompt',gid('gitPrompt').value)">💾 Save</button>
+      <button class="btn btn-sm btn-ghost" onclick="gid('gitPrompt').value=DEFAULT_GIT_PROMPT;toast('↩️ Reset')">↩️ Default</button>
+    </div></div>
+  </div>`;}
 function svCfg(k,v){vsc.postMessage({type:'saveConfig',payload:{key:k,value:v}});toast('✅ Saved')}
 
 // Default system prompt — based on what Copilot sends to the LLM
@@ -372,6 +384,97 @@ function rDanger(){return`<div class="content-title" style="color:var(--color-er
     <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">Resets all settings to their default values. Providers, models, keys — all cleared. Same state as installing the extension for the first time.</div>
     <button class="btn btn-danger" onclick="confirmModal('⚠️ Factory Reset?','All data will be wiped. The extension will be as if freshly installed. This CANNOT be undone.',()=>{vsc.postMessage({type:'factoryReset'});toast('🏭 Factory reset complete')})">🏭 Factory Reset</button>
   </div>`}
+
+// --- Tools: Git ---
+const DEFAULT_GIT_PROMPT = `You are an expert Git commit message writer. Analyze the following git diff and generate a concise, conventional commit message (e.g., "feat: add feature X" or "fix: resolve issue Y"). 
+
+Include a short summary line (max 72 chars), followed by a blank line, then 1-3 bullet points of key changes.
+
+Branch: {branch}
+Repo: {repo}
+
+--- DIFF ---
+{diff}
+
+Generate only the commit message, nothing else.`;
+
+let genResult = '';
+let genTrace = '';
+let genProviderFamily = '';
+let genLoading = false;
+let showTrace = false;
+
+function rTools(){
+  const hasProviders = Object.keys(st.providers).length > 0;
+  const famLabels = Object.keys(st.providers).map(f => {
+    const pname = (st.providers[f]||{}).name||f;
+    return {v:f, l:pname};
+  });
+  if (famLabels.length && !genProviderFamily) genProviderFamily = famLabels[0].v;
+  return`<div class="content-title">🛠️ Git Tools</div><div class="content-subtitle">Generate AI-powered commit messages using your configured LLM</div>
+  <!-- Generate Commit (TOP) -->
+  <div class="card">
+    <div class="card-header">🤖 Generate Commit Message</div>
+    <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">Select a provider and click a button. Git diff is fetched automatically, then sent to the LLM.</div>
+    ${hasProviders?`<div class="inline-row" style="gap:8px;align-items:center;margin-bottom:8px">
+      <span style="font-size:11px;font-weight:600;color:var(--color-text-secondary);white-space:nowrap">Provider:</span>
+      <div class="dropdown-wrap" id="ddGitProv" style="min-width:160px"></div>
+      <span style="font-size:10px;color:var(--color-text-muted)">| ${esc((st.providers[genProviderFamily]||{}).baseUrl||'')}</span>
+    </div>`:''}
+    <div class="inline-row" style="gap:8px;margin-bottom:6px">
+      <button class="btn btn-primary btn-sm" onclick="genCommit('staged')" ${!hasProviders?'disabled style="opacity:.4"':''} id="btnStaged">🧠 Staged Diff</button>
+      <button class="btn btn-primary btn-sm" onclick="genCommit('unstaged')" ${!hasProviders?'disabled style="opacity:.4"':''} id="btnUnstaged">🧠 Unstaged Diff</button>
+      <span id="genSpinner" style="display:none;animation:spin .8s linear infinite;font-size:18px">⏳</span>
+      ${!hasProviders?'<span class="badge badge-warning">No providers configured</span>':''}
+    </div>
+    <div class="checkbox-wrap" onclick="showTrace=!showTrace;render()"><div class="checkbox-box${showTrace?' checked':''}"><svg class="checkbox-icon" viewBox="0 0 11 11"${showTrace?'':' style="display:none"'}><path d="M2 5.5L4.5 8L9 3"/></svg></div><span class="checkbox-label">Show debug trace</span></div>
+    ${showTrace&&genTrace?`<div style="margin-top:12px"><div class="form-label">🔍 Debug Trace</div><pre style="background:var(--color-input-bg);border:1px solid rgba(59,130,246,.3);border-radius:8px;padding:10px;font-size:10px;font-family:monospace;white-space:pre-wrap;word-break:break-all;color:var(--color-text-muted)">${esc(genTrace)}</pre></div>`:''}
+    ${genResult!==''?`<div style="margin-top:12px"><div class="form-label">Generated Commit Message</div><pre id="genResultBox" style="background:var(--color-input-bg);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:12px;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-all">${esc(genResult)}</pre><div style="margin-top:8px;display:flex;gap:8px"><button class="btn btn-sm btn-primary" onclick="copyGenResult()">📋 Copy</button><button class="btn btn-sm btn-ghost" onclick="genResult='';genTrace='';render()">❌ Clear</button></div></div>`:''}
+  </div>
+  <!-- Repo Status (BOTTOM) -->
+  <div class="card">
+    <div class="card-header">📊 Repo Status <span class="badge badge-muted">optional</span></div>
+    <div class="inline-row" style="gap:8px">
+      <button class="btn btn-primary btn-sm" onclick="vsc.postMessage({type:'execGit'})">${iEye()} Fetch Git Status</button>
+      <span style="font-size:12px;color:var(--color-text-muted)">Inspect staged/unstaged diffs, branch, and short status</span>
+    </div>
+    ${st.gitBranch?`<div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap">
+      <span class="badge badge-info">🌿 ${esc(st.gitBranch)}</span>
+      <span class="badge badge-primary">📁 ${esc(st.gitRepo)}</span>
+      ${st.gitStaged?`<span class="badge badge-success">✅ Staged changes</span>`:''}
+      ${st.gitUnstaged?`<span class="badge badge-warning">⚠ Unstaged changes</span>`:''}
+    </div>`:''}
+    ${st.gitStatusShort?`<div style="margin-top:10px"><div class="form-label">Status (short)</div><pre style="background:var(--color-input-bg);border:1px solid var(--color-input-border);border-radius:8px;padding:10px;font-size:11px;font-family:monospace;white-space:pre-wrap;word-break:break-all">${esc(st.gitStatusShort)}</pre></div>`:''}
+    ${(st.gitStaged||st.gitUnstaged)?`<div style="margin-top:12px">
+      ${st.gitStaged?`<div style="margin-bottom:8px"><div class="form-label">Staged Diff</div><pre style="background:var(--color-input-bg);border:1px solid var(--color-input-border);border-radius:8px;padding:10px;font-size:11px;font-family:monospace;white-space:pre-wrap;word-break:break-all">${esc(st.gitStaged)}</pre></div>`:''}
+      ${st.gitUnstaged?`<div style="margin-bottom:8px"><div class="form-label">Unstaged Diff</div><pre style="background:var(--color-input-bg);border:1px solid var(--color-input-border);border-radius:8px;padding:10px;font-size:11px;font-family:monospace;white-space:pre-wrap;word-break:break-all">${esc(st.gitUnstaged)}</pre></div>`:''}
+    </div>`:''}
+  </div>
+`;}
+
+// Auto-fetch git then call LLM — single click, shows spinner
+function genCommit(which){
+  genLoading=true;genResult='';genTrace='';render();
+  setSpinner(true);
+  vsc.postMessage({type:'execAndGen',payload:{which,family:genProviderFamily}});
+}
+function renderGenResult(p){
+  setSpinner(false);
+  genTrace=p.trace||'';genLoading=false;
+  if(p.error){genResult='❌ Error: '+p.error;toast('❌ '+p.error)}
+  else{genResult=p.text||'';toast('✅ Commit message generated')}
+  render();
+}
+function setSpinner(on){
+  const sp=document.getElementById('genSpinner');if(sp)sp.style.display=on?'inline':'none';
+  ['btnStaged','btnUnstaged'].forEach(id=>{const b=document.getElementById(id);if(b)b.disabled=on;});
+}
+function copyGenResult(){const el=document.getElementById('genResultBox');if(!el)return;navigator.clipboard?.writeText(genResult).then(()=>toast('📋 Copied!')).catch(()=>toast('❌ Copy failed'))}
+
+// Spinner animation keyframe
+const _spinStyle = document.createElement('style');
+_spinStyle.textContent = '@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
+document.head.appendChild(_spinStyle);
 
 // --- Dropdown System ---
 window._ddReg = {};
@@ -569,6 +672,19 @@ function rebindDD() {
     });
     ddKeyProv = ddMake('ddKeyProv', keyFamLabels, fams[0]);
   }
+  if (active === 'tools') {
+    const fams2 = Object.keys(st.providers); if (!fams2.length) return;
+    const gitFamLabels = fams2.map(f => {
+      const pname = (st.providers[f]||{}).name || f;
+      return { v: f, l: pname };
+    });
+    ddMake('ddGitProv', gitFamLabels, genProviderFamily || fams2[0], function(v) {
+      genProviderFamily = v;
+      // Update the URL shown next to the dropdown
+      const urlSpan = document.querySelector('#content .card:last-child .inline-row span:nth-child(3)');
+      if (urlSpan) urlSpan.textContent = '| ' + ((st.providers[v]||{}).baseUrl||'');
+    });
+  }
 }
 
 // --- Checkbox ---
@@ -593,7 +709,7 @@ function updBadges(){document.getElementById('provCount').textContent=Object.key
 function gid(id){return document.getElementById(id)}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')}
 
-window.addEventListener('message',e=>{if(e.data.type==='state'){st=e.data.payload;render()}});
+window.addEventListener('message',e=>{if(e.data.type==='state'){st=e.data.payload;render()}else if(e.data.type==='gitState'){st.gitStaged=e.data.payload.staged;st.gitUnstaged=e.data.payload.unstaged;st.gitStatusShort=e.data.payload.statusShort;st.gitBranch=e.data.payload.branch;st.gitRepo=e.data.payload.repo;render()}else if(e.data.type==='gitError'){toast('❌ '+e.data.payload)}else if(e.data.type==='genCommitMsgResult'){renderGenResult(e.data.payload)}});
 vsc.postMessage({type:'getState'});
 document.getElementById('icoProv').innerHTML = iGlobe();
 </script>

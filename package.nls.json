@@ -19,6 +19,8 @@
   "copilot-adapter-kit.config.visionFallbackAlways": "If enabled, always preprocess image input through the configured vision fallback model when one is set. Recommended for providers that reject image parts.",
   "copilot-adapter-kit.config.systemPrompt": "Custom system prompt template. Supports placeholders: {model}, {date}, {tools}, {cakVersion}. Leave empty to use Copilot's default. Example: \"You are {model}, a helpful coding assistant. Today is {date}.\"",
   "copilot-adapter-kit.config.userPromptTemplate": "Custom user prompt wrapper template. Use {userMessage} placeholder for the actual user input. Leave empty for no wrapping. Example: \"[CONTEXT]\\n\\n{userMessage}\\n\\n[/CONTEXT]\"",
+  "copilot-adapter-kit.config.gitPrompt": "Custom Git commit message generation prompt. Supports placeholders: {diff}, {branch}, {repo}. Invoked from the Tools tab to generate conventional commit messages via the configured LLM.",
+  "copilot-adapter-kit.command.generateCommitMessage": "Copilot Adapter Kit: Generate Git Commit Message",
   "copilot-adapter-kit.config.models": "Add custom models. Each entry needs id and family. Matches providers by family name.",
 
   "copilot-adapter-kit.config.hiddenBuiltins": "Specific built-in model IDs to hide from the picker. Use the Open Panel UI to manage this visually.",

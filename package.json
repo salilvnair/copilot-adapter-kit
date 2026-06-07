@@ -33,6 +33,24 @@
         }
       }
     },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cak-git-sidebar",
+          "title": "CAK Git",
+          "icon": "$(cak-icon)"
+        }
+      ]
+    },
+    "views": {
+      "cak-git-sidebar": [
+        {
+          "type": "webview",
+          "id": "cak.miniGitPanel",
+          "name": "Git AI"
+        }
+      ]
+    },
     "languageModelChatProviders": [
       {
         "vendor": "copilot-adapter-kit",
@@ -83,6 +101,10 @@
       {
         "command": "copilot-adapter-kit.openDumps",
         "title": "%copilot-adapter-kit.command.openDumps%"
+      },
+      {
+        "command": "copilot-adapter-kit.generateCommitMessage",
+        "title": "%copilot-adapter-kit.command.generateCommitMessage%"
       }
     ],
     "configuration": {
@@ -218,6 +240,11 @@
           "type": "string",
           "default": "",
           "description": "%copilot-adapter-kit.config.userPromptTemplate%"
+        },
+        "copilot-adapter-kit.gitPrompt": {
+          "type": "string",
+          "default": "",
+          "description": "%copilot-adapter-kit.config.gitPrompt%"
         }
       }
     }
