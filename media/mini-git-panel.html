@@ -36,18 +36,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .msg-card{background:#2a2d2e;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;position:relative;animation:card-in 180ms ease-out;box-shadow:0 4px 16px rgba(0,0,0,.25);display:flex;flex-direction:column;flex:1 1 0%;min-height:0;width:100%}
 @keyframes card-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 .msg-scroll{flex:1 1 0%;overflow-y:auto;min-height:0}
-.msg-footer{flex-shrink:0;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:space-between;gap:6px}
-.msg-footer .inspector-btn{width:22px;height:22px;border:none;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all 120ms;background:rgba(255,255,255,.05);color:rgba(255,255,255,.3);flex-shrink:0}
-.msg-footer .inspector-btn:hover{background:rgba(99,102,241,.12);color:var(--primary)}
-/* Inspector overlay */
-.inspector-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center}
-.inspector-box{background:var(--surface);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:20px;max-width:500px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 12px 48px rgba(0,0,0,.5)}
-.inspector-box h3{font-size:13px;font-weight:700;margin-bottom:12px;color:#f4f4f5}
-.inspector-box .trace-entry{margin-bottom:10px}
-.inspector-box .trace-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:2px}
-.inspector-box .trace-value{font-size:11px;font-family:monospace;color:var(--text);word-break:break-all;background:var(--input);padding:6px 8px;border-radius:5px;white-space:pre-wrap;max-height:200px;overflow-y:auto}
-.inspector-box .close-btn{position:absolute;top:10px;right:10px;width:24px;height:24px;border:none;border-radius:5px;cursor:pointer;background:rgba(255,255,255,.05);color:rgba(255,255,255,.4);display:flex;align-items:center;justify-content:center;font-size:12px;transition:all 120ms}
-.inspector-box .close-btn:hover{background:rgba(239,68,68,.15);color:var(--error)}
+.msg-footer{flex-shrink:0;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:6px}
+/* Audit card */
+.audit-area{display:none;padding:0 8px 8px;flex-shrink:0}
+.audit-area.show{display:block}
+.audit-card{background:#1a1c1e;border:1px solid rgba(139,92,246,.15);border-radius:10px;padding:14px 16px;max-height:50vh;overflow-y:auto;animation:card-in 180ms ease-out;box-shadow:0 0 0 1px rgba(139,92,246,.06)}
+.audit-card .mdv-root{font-size:11.5px}
+.audit-card .mdv-root table{font-size:10.5px}
+.audit-card .mdv-root pre{font-size:10px}
+/* Audit toggle btn in dd-row */
+.audit-btn{width:24px;height:24px;border:none;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 120ms;background:rgba(255,255,255,.04);color:rgba(255,255,255,.25);flex-shrink:0;margin-left:4px}
+.audit-btn:hover{background:rgba(99,102,241,.1);color:rgba(255,255,255,.6)}
+.audit-btn.active{background:rgba(99,102,241,.18);color:var(--primary);box-shadow:0 0 0 1px rgba(99,102,241,.25)}
+
 .msg-card .card-actions{position:absolute;top:10px;right:10px;display:flex;gap:4px}
 .msg-card .card-actions button{width:24px;height:24px;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;transition:all 120ms;background:rgba(255,255,255,.05)}
 .msg-card .card-actions .copy-btn{color:rgba(255,255,255,.5)}
@@ -91,8 +92,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 <div class="dd-row">
   <span>Provider:</span><div class="dropdown-wrap" id="ddProv"></div>
   <span style="margin-left:4px">Model:</span><div class="dropdown-wrap" id="ddModel"></div>
+  <button class="audit-btn" id="auditBtn" onclick="toggleAudit()" title="Toggle debug audit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></button>
 </div>
 <div class="result-area" id="resultArea"></div>
+<div class="audit-area" id="auditArea"><div class="audit-card"><div id="auditContent"></div></div></div>
 <div class="splitter-wrap" id="splitterWrap">
   <div class="splitter-bar" id="splitterBar"><div class="splitter-line"></div></div>
   <div class="splitter-tip">Drag to resize &bull; Double-click to reset</div>
@@ -218,7 +221,7 @@ function renderResult(mode,errMsg){
         var mh=0;for(var mi=0;mi<genModelName.length;mi++)mh=((mh<<5)-mh)+genModelName.charCodeAt(mi);
         badgeHtml+='<span class="card-badge" style="background:hsla('+(Math.abs(mh)%360)+',70%,55%,.15);color:hsl('+(Math.abs(mh)%360)+',70%,60%)">⚙ '+esc(genModelName)+'</span>';
       }
-      if(badgeHtml)badgeHtml='<div style="display:flex;align-items:center;gap:6px">'+badgeHtml+'</div><button class="inspector-btn" onclick="showInspector()" title="Inspect request detail">🔍</button>';
+      if(badgeHtml)badgeHtml='<div style="display:flex;align-items:center;gap:6px">'+badgeHtml+'</div>';
       var svgCopy='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
       var svgX='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
       d.innerHTML='<div class="msg-card">'
@@ -249,12 +252,15 @@ function copyResult(){
   }).catch(function(){});
 }
 function clearResult(){genText='';$('resultArea').innerHTML=''}
-var genTraceData='';
-function showInspector(){
-  var ov=document.createElement('div');ov.className='inspector-overlay';
-  ov.innerHTML='<div class="inspector-box" style="position:relative"><button class="close-btn" onclick="this.parentElement.parentElement.remove()">✕</button><h3>🔍 Request Inspection</h3>'+genTraceData+'</div>';
-  ov.addEventListener('click',function(e){if(e.target===ov)ov.remove()});
-  document.body.appendChild(ov);
+var genTraceData='',auditOpen=false;
+function toggleAudit(){
+  auditOpen=!auditOpen;
+  var btn=$('auditBtn'),area=$('auditArea'),ac=$('auditContent');
+  if(btn)btn.classList.toggle('active',auditOpen);
+  if(area)area.classList.toggle('show',auditOpen);
+  if(auditOpen && ac && typeof window.MdRender==='function'){
+    window.MdRender(genTraceData||'*No trace data yet.*', ac);
+  }
 }
 
 // Splitter — default 40%, max result = innerHeight-350px, min 10px
@@ -295,8 +301,9 @@ window.addEventListener('message',function(e){
     generating=false;
     genProvName=p.provider||'';genModelName=p.model||'';
     // Build trace data for inspector
-    genTraceData='';
-    if(p.trace)genTraceData=p.trace.split('\\n').map(function(l){var parts=l.split(': ');var label=parts[0],value=parts.slice(1).join(': ');return '<div class="trace-entry"><div class="trace-label">'+esc(label)+'</div><div class="trace-value">'+esc(value)+'</div></div>'}).join('');
+    genTraceData=p.trace||'*No trace data available.*';
+    // If audit is open, refresh it with new trace
+    if(auditOpen){ var ac=$('auditContent'); if(ac&&typeof window.MdRender==='function')window.MdRender(genTraceData,ac); }
     if(p.error){genText='';renderResult('error',p.error)}
     else{genText=p.text||genText;renderResult('')}
   }

@@ -102,7 +102,39 @@ export class MiniGitPanel implements vscode.WebviewViewProvider {
       let text = '', settled = false;
       const sysP = cfg.get<string>('systemPrompt', '');
       const usrT = cfg.get<string>('userPromptTemplate', '');
-      const trace = `Provider: ${prov.name || family}\nModel: ${model}\nBase URL: ${baseUrl}${apiPath}\nAPI Key: ${key.slice(0,8)}...${key.slice(-4)}\nBranch: ${branch}\nRepo: ${repo}\nSystem Prompt: ${sysP ? 'custom (' + sysP.length + ' chars)' : '(none)'}\nUser Template: ${usrT ? 'custom (' + usrT.length + ' chars)' : '(none)'}\nGit Prompt Config: ${gpc ? 'custom (' + gpc.length + ' chars)' : '(built-in default)'}\nUser Guidance: ${userMsg?.trim() || '(none)'}\nPrompt (first 500 chars): ${prompt.slice(0,500)}`;
+      const spDisp = sysP ? '\n\n```\n' + sysP.slice(0,800) + (sysP.length>800?'\n... (truncated)':'') + '\n```' : '\n\n*(none configured)*';
+      const utDisp = usrT ? '\n\n```\n' + usrT.slice(0,600) + (usrT.length>600?'\n... (truncated)':'') + '\n```' : '\n\n*(none configured)*';
+      const gpDisp = gpc ? '\n\n```\n' + gpc.slice(0,600) + (gpc.length>600?'\n... (truncated)':'') + '\n```' : '\n\n*(built-in default)*';
+      const promptPreview = prompt.length>1200 ? prompt.slice(0,1200)+'\n\n... *(truncated, '+prompt.length+' chars total)*' : prompt;
+      const trace = [
+        '# 🔬 Request Inspector',
+        '',
+        '| Property | Value |',
+        '|----------|-------|',
+        '| **Provider** | `' + (prov.name || family) + '` |',
+        '| **Model** | `' + model + '` |',
+        '| **Base URL** | `' + baseUrl + apiPath + '` |',
+        '| **API Key** | `' + key.slice(0,8) + '...' + key.slice(-4) + '` |',
+        '| **Branch** | `' + branch + '` |',
+        '| **Repo** | `' + repo + '` |',
+        '| **User Guidance** | ' + (userMsg?.trim() || '*(none)*') + ' |',
+        '',
+        '---',
+        '## 🧠 System Prompt' + spDisp,
+        '',
+        '---',
+        '## 📝 User Prompt Template' + utDisp,
+        '',
+        '---',
+        '## 💬 Git Commit Prompt' + gpDisp,
+        '',
+        '---',
+        '## 📤 Full Prompt Sent to LLM',
+        '',
+        '```',
+        promptPreview,
+        '```',
+      ].join('\n');
       const done = (r: { text?: string; error?: string }) => { if (settled) return; settled = true; this.view?.webview.postMessage({ type: 'genResult', payload: { ...r, provider: prov.name || family, model, trace } }); };
       const sink: StreamEvents = {
         onToken: t => { text += t; this.view?.webview.postMessage({ type: 'genToken', payload: t }); },
