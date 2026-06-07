@@ -145,9 +145,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="sidebar-section" style="margin-top:4px">Tools</div>
 <div class="sidebar-tab" data-tab="json"><span class="tab-icon">{ }</span>JSON Settings</div>
 <div class="sidebar-tab" data-tab="dumps"><span class="tab-icon">📂</span>Request Dumps</div>
-<div class="sidebar-tab" data-tab="tools"><span class="tab-icon">🛠️</span>Git Tools</div>
+<div class="sidebar-tab" data-tab="tools"><span class="tab-icon">📝</span>Git Tools</div>
 <div class="sidebar-section" style="margin-top:4px">Danger</div>
-<div class="sidebar-tab" data-tab="devtools"><span class="tab-icon">🛠️</span>Dev Tools</div>
+<div class="sidebar-tab" data-tab="devtools"><span class="tab-icon">🔩</span>Dev Tools</div>
 <div class="sidebar-section" style="margin-top:8px">Bin</div>
 <div class="sidebar-tab" data-tab="bin"><span class="tab-icon">🗑️</span>Bin<span class="tab-badge" id="binCount">0</span></div>
 <div class="sidebar-section" style="margin-top:8px">Danger</div>
@@ -159,7 +159,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 <script>
 const vsc=acquireVsCodeApi();
-let st={providers:{},models:[],builtinModels:[],copilotModels:[],maxTokens:0,logLevel:'quiet',stabilizeTools:false,hiddenBuiltins:[],hiddenCustomModels:[],keys:{},visionFallbackModel:'',visionFallbackAlways:false,systemPrompt:'',userPromptTemplate:'',gitPrompt:'',gitStaged:'',gitUnstaged:'',gitStatusShort:'',gitBranch:'',gitRepo:''};
+let st={providers:{},models:[],builtinModels:[],copilotModels:[],maxTokens:0,logLevel:'quiet',stabilizeTools:false,hiddenBuiltins:[],hiddenCustomModels:[],keys:{},visionFallbackModel:'',visionFallbackAlways:false,systemPrompt:'',userPromptTemplate:'',gitPrompt:'',maxDiffFiles:500,gitStaged:'',gitUnstaged:'',gitStatusShort:'',gitBranch:'',gitRepo:''};
 let active='providers';
 
 // SVG icons — exact Daakia paths (24x24 viewBox, rendered at 14px)
@@ -182,7 +182,7 @@ document.getElementById('sidebar').addEventListener('click',e=>{
 
 function render(){
   const c=document.getElementById('content');
-  switch(active){case'providers':c.innerHTML=rProv();break;case'models':c.innerHTML=rMod();break;case'keys':c.innerHTML=rKeys();break;case'config':c.innerHTML=rCfg();break;case'json':c.innerHTML=rJson();break;case'dumps':c.innerHTML=rDmp();break;case'danger':c.innerHTML=rDanger();break;case'bin':c.innerHTML=rBin();break;case'devtools':c.innerHTML=rDev();}
+  switch(active){case'providers':c.innerHTML=rProv();break;case'models':c.innerHTML=rMod();break;case'keys':c.innerHTML=rKeys();break;case'config':c.innerHTML=rCfg();break;case'json':c.innerHTML=rJson();break;case'dumps':c.innerHTML=rDmp();break;case'danger':c.innerHTML=rDanger();break;case'bin':c.innerHTML=rBin();break;case'tools':c.innerHTML=rTools();break;case'devtools':c.innerHTML=rDev();}
   updBadges();rebindDD();
 }
 
@@ -312,7 +312,7 @@ function clearBin(){confirmModal('Clear entire bin?','Permanently deletes ALL de
 function rDev(){
   const osKeychain=/win/i.test(navigator.platform||'')?'Windows Credential Manager':/linux/i.test(navigator.platform||'')?'Linux libsecret (gnome-keyring / kwallet)':'macOS Keychain Access';
   const pfx='copilot-adapter-kit.apiKey';
-  let h=`<div class="content-title">🛠️ Developer Tools</div>`;
+  let h=`<div class="content-title">🔩 Developer Tools</div>`;
 
   // Keychain info
   h+=`<div class="card"><div class="card-header">🔐 Keychain Storage</div>`;
@@ -544,7 +544,7 @@ function rTools(){
     return {v:f, l:pname};
   });
   if (famLabels.length && !genProviderFamily) genProviderFamily = famLabels[0].v;
-  return`<div class="content-title">🛠️ Git Tools</div><div class="content-subtitle">Generate AI-powered commit messages using your configured LLM</div>
+  return`<div class="content-title">📝 Git Tools</div><div class="content-subtitle">Generate AI-powered commit messages using your configured LLM</div>
   <!-- Generate Commit (TOP) -->
   <div class="card">
     <div class="card-header">🤖 Generate Commit Message</div>
@@ -554,6 +554,11 @@ function rTools(){
       <div class="dropdown-wrap" id="ddGitProv" style="min-width:160px"></div>
       <span style="font-size:10px;color:var(--color-text-muted)">| ${esc((st.providers[genProviderFamily]||{}).baseUrl||'')}</span>
     </div>`:''}
+    <div class="inline-row" style="gap:8px;align-items:center;margin-bottom:8px">
+      <span style="font-size:11px;font-weight:600;color:var(--color-text-secondary);white-space:nowrap">Max Diff Files:</span>
+      <input class="form-input sm" id="maxDiffFiles" value="${st.maxDiffFiles||500}" style="width:80px;text-align:center" type="number" min="10" onchange="svCfg('maxDiffFiles',+this.value||500)">
+      <span style="font-size:9px;color:var(--color-text-muted)">Compress to --stat above this</span>
+    </div>
     <div class="inline-row" style="gap:8px;margin-bottom:6px">
       <button class="btn btn-primary btn-sm" onclick="genCommit('staged')" ${!hasProviders?'disabled style="opacity:.4"':''} id="btnStaged">🧠 Staged Diff</button>
       <button class="btn btn-primary btn-sm" onclick="genCommit('unstaged')" ${!hasProviders?'disabled style="opacity:.4"':''} id="btnUnstaged">🧠 Unstaged Diff</button>

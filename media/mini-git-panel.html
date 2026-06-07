@@ -30,34 +30,52 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .dropdown-item{padding:6px 10px;font-size:11px;cursor:pointer;transition:background 100ms;color:var(--muted)}
 .dropdown-item:hover{background:rgba(99,102,241,.08);color:#e5e7eb}
 .dropdown-item.selected{color:var(--primary);font-weight:600}
-.result-area{padding:8px;flex-shrink:0;min-height:36px;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.result-area .loading{color:var(--muted);font-size:11px;padding:0 4px;display:flex;align-items:center;gap:6px}
-.result-area .error{color:var(--error);font-size:11px;padding:0 4px}
-.msg-card{background:#2a2d2e;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;position:relative;animation:card-in 180ms ease-out;box-shadow:0 4px 16px rgba(0,0,0,.25);display:flex;flex-direction:column;flex:1 1 0%;min-height:0;width:100%}
+.result-area{padding:8px 8px 4px;flex-shrink:0;min-height:0;display:flex;flex-direction:column;align-items:stretch}
+.result-area .loading{color:var(--muted);font-size:11px;padding:4px 8px;display:flex;align-items:center;gap:6px}
+.result-area .error{color:var(--error);font-size:11px;padding:4px 8px}
+
+/* ── Card shared ── */
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-shrink:0}
+.card-header-actions{display:flex;gap:4px}
+.chevron-btn{width:22px;height:22px;border:none;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 120ms;background:transparent;color:rgba(255,255,255,.2);flex-shrink:0}
+.chevron-btn:hover{background:rgba(99,102,241,.12);color:var(--primary)}
+.chevron-btn svg{transition:transform 180ms}
+.collapsed .chevron-btn svg{transform:rotate(-90deg)}
+.action-btn{width:24px;height:24px;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;transition:all 120ms}
+.copy-btn{color:#fbbf24;background:rgba(251,191,36,.1)}
+.copy-btn:hover{color:#fcd34d;background:rgba(251,191,36,.2)}
+.copy-btn.copied{color:var(--success)!important}
+.clear-btn{color:#f87171;background:rgba(248,113,113,.1)}
+.clear-btn:hover{color:#fca5a5;background:rgba(248,113,113,.25)}
+
+/* ── Commit-msg card ── */
+.msg-card{background:#2a2d2e;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px 14px;animation:card-in 180ms ease-out;box-shadow:0 4px 16px rgba(0,0,0,.25);display:flex;flex-direction:column;min-height:0;width:100%}
 @keyframes card-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 .msg-scroll{flex:1 1 0%;overflow-y:auto;min-height:0}
 .msg-footer{flex-shrink:0;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:6px}
-/* Audit card */
+.msg-card .msg-md-wrap{font-size:12.5px;line-height:1.7;color:#e4e4e7}
+.msg-card .card-badge{display:inline-flex;align-items:center;gap:4px;font-size:9px;padding:2px 8px;border-radius:999px;font-weight:600;margin-top:10px}
+.msg-card.collapsed .msg-scroll,.msg-card.collapsed .msg-footer{display:none}
+.msg-card.collapsed{padding:4px 10px}
+.msg-card.collapsed .card-header{margin-bottom:0}
+.msg-card.collapsed .chevron-btn{width:18px;height:18px}
+.msg-card.collapsed .action-btn{width:20px;height:20px;font-size:9px}
+
+/* ── Audit card ── */
 .audit-area{display:none;padding:0 8px 8px;flex-shrink:0}
 .audit-area.show{display:block}
-.audit-card{background:#1a1c1e;border:1px solid rgba(139,92,246,.15);border-radius:10px;padding:14px 16px;max-height:50vh;overflow-y:auto;animation:card-in 180ms ease-out;box-shadow:0 0 0 1px rgba(139,92,246,.06)}
+.audit-card{background:#1a1c1e;border:1px solid rgba(139,92,246,.15);border-radius:10px;padding:12px 14px;max-height:50vh;overflow-y:auto;animation:card-in 180ms ease-out;box-shadow:0 0 0 1px rgba(139,92,246,.06);display:flex;flex-direction:column}
 .audit-card .mdv-root{font-size:11.5px}
 .audit-card .mdv-root table{font-size:10.5px}
 .audit-card .mdv-root pre{font-size:10px}
+.audit-card.collapsed{max-height:none;overflow:hidden;padding:4px 10px}
+.audit-card.collapsed #auditContent{display:none}
+.audit-card.collapsed .card-header{margin-bottom:0}
+.audit-card.collapsed .chevron-btn{width:18px;height:18px}
 /* Audit toggle btn in dd-row */
 .audit-btn{width:24px;height:24px;border:none;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 120ms;background:rgba(255,255,255,.04);color:rgba(255,255,255,.25);flex-shrink:0;margin-left:4px}
 .audit-btn:hover{background:rgba(99,102,241,.1);color:rgba(255,255,255,.6)}
 .audit-btn.active{background:rgba(99,102,241,.18);color:var(--primary);box-shadow:0 0 0 1px rgba(99,102,241,.25)}
-
-.msg-card .card-actions{position:absolute;top:10px;right:10px;display:flex;gap:4px}
-.msg-card .card-actions button{width:24px;height:24px;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;transition:all 120ms;background:rgba(255,255,255,.05)}
-.msg-card .card-actions .copy-btn{color:rgba(255,255,255,.5)}
-.msg-card .card-actions .copy-btn:hover{color:var(--primary);background:rgba(99,102,241,.15)}
-.msg-card .card-actions .copy-btn.copied{color:var(--success)!important}
-.msg-card .card-actions .clear-btn{color:rgba(255,255,255,.35)}
-.msg-card .card-actions .clear-btn:hover{color:var(--error);background:rgba(239,68,68,.15)}
-.msg-card .msg-md-wrap{font-size:12.5px;line-height:1.7;color:#e4e4e7;padding-right:44px}
-.msg-card .card-badge{display:inline-flex;align-items:center;gap:4px;font-size:9px;padding:2px 8px;border-radius:999px;font-weight:600;margin-top:10px}
 .splitter-wrap{position:relative;flex-shrink:0;z-index:10}
 .splitter-bar{height:6px;cursor:row-resize;display:flex;align-items:center;justify-content:center;user-select:none}
 .splitter-bar .splitter-line{height:3px;border-radius:3px;width:44px;background:rgba(255,255,255,.08);transition:all 150ms}
@@ -95,7 +113,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
   <button class="audit-btn" id="auditBtn" onclick="toggleAudit()" title="Toggle debug audit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></button>
 </div>
 <div class="result-area" id="resultArea"></div>
-<div class="audit-area" id="auditArea"><div class="audit-card"><div id="auditContent"></div></div></div>
+<div class="audit-area" id="auditArea"><div class="audit-card" id="auditCard"><div class="card-header"><button class="chevron-btn" onclick="toggleAuditCard()" title="Collapse/Expand"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="card-header-actions"></div></div><div id="auditContent"></div></div></div>
 <div class="splitter-wrap" id="splitterWrap">
   <div class="splitter-bar" id="splitterBar"><div class="splitter-line"></div></div>
   <div class="splitter-tip">Drag to resize &bull; Double-click to reset</div>
@@ -110,6 +128,7 @@ var gitBranch='',gitRepo='',gitStatus='',stagedCount=0,unstagedCount=0;
 var genFamily='',genModel='';
 var generating=false,genText='',modelsByFamily={};
 var genProvName='',genModelName='';
+var genTokens=0,genElapsed=0,genTokPerSec=0;
 var ddProv=null,ddModel=null;
 
 function $(id){return document.getElementById(id)}
@@ -199,6 +218,41 @@ function renderDiff(){
   d.innerHTML=h;
 }
 
+// ── Built-in Markdown renderer (always available) ──
+function mdRenderFallback(text, el){
+  if(!el)return;
+  // Escape HTML first, then apply markdown
+  var out=esc(text);
+  // Fenced code blocks
+  out=out.replace(/```(\w*)\n([\s\S]*?)```/g,function(_,lang,code){
+    return '<div class="mdv-code-block"><div class="mdv-code-header"><span class="mdv-lang-pill">'+(lang||'text')+'</span></div><pre><code>'+code+'</code></pre></div>';
+  });
+  // Inline code
+  out=out.replace(/`([^`]+)`/g,'<code class="mdv-inline-code">$1</code>');
+  // Bold
+  out=out.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  // Italic
+  out=out.replace(/\*(.+?)\*/g,'<em>$1</em>');
+  // Headings
+  out=out.replace(/^### (.+)$/gm,'<h3>$1</h3>');
+  out=out.replace(/^## (.+)$/gm,'<h2>$1</h2>');
+  out=out.replace(/^# (.+)$/gm,'<h1>$1</h1>');
+  // Unordered lists
+  out=out.replace(/^- (.+)$/gm,'<li>$1</li>');
+  out=out.replace(/(<li>.*<\/li>)/s,function(m){return '<ul>'+m+'</ul>';});
+  // Blockquotes
+  out=out.replace(/^> (.+)$/gm,'<blockquote><p>$1</p></blockquote>');
+  // Horizontal rules
+  out=out.replace(/^---$/gm,'<hr>');
+  // Links
+  out=out.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2">$1</a>');
+  // Paragraphs: double newlines
+  out=out.replace(/\n\n/g,'</p><p>');
+  out='<div class="mdv-root"><p>'+out+'</p></div>';
+  el.innerHTML=out;
+  el.classList.add('mdv-root');
+}
+
 function renderResult(mode,errMsg){
   var d=$('resultArea'),btn=$('genBtn');if(!d)return;
   if(btn){btn.disabled=false;btn.innerHTML='✨'}
@@ -221,21 +275,30 @@ function renderResult(mode,errMsg){
         var mh=0;for(var mi=0;mi<genModelName.length;mi++)mh=((mh<<5)-mh)+genModelName.charCodeAt(mi);
         badgeHtml+='<span class="card-badge" style="background:hsla('+(Math.abs(mh)%360)+',70%,55%,.15);color:hsl('+(Math.abs(mh)%360)+',70%,60%)">⚙ '+esc(genModelName)+'</span>';
       }
+      // Add token/time badges
+      if(genTokPerSec){
+        badgeHtml+='<span class="card-badge" style="background:rgba(56,189,248,.12);color:#38bdf8">⚡ '+genTokPerSec+' tok/s</span>';
+      }
+      if(genElapsed){
+        var secs=(genElapsed/1000).toFixed(1);
+        badgeHtml+='<span class="card-badge" style="background:rgba(168,85,247,.12);color:#a855f7">⏱️ '+secs+'s</span>';
+      }
       if(badgeHtml)badgeHtml='<div style="display:flex;align-items:center;gap:6px">'+badgeHtml+'</div>';
       var svgCopy='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
       var svgX='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-      d.innerHTML='<div class="msg-card">'
-        +'<div class="card-actions"><button class="copy-btn" id="copyIcon" onclick="copyResult()" title="Copy raw markdown">'+svgCopy+'</button>'
-        +'<button class="clear-btn" onclick="clearResult()" title="Clear">'+svgX+'</button></div>'
+      d.innerHTML='<div class="msg-card" id="msgCard">'
+        +'<div class="card-header"><button class="chevron-btn" onclick="toggleMsgCard()" title="Collapse/Expand"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>'
+        +'<div class="card-header-actions"><button class="action-btn copy-btn" id="copyIcon" onclick="copyResult()" title="Copy raw markdown">'+svgCopy+'</button>'
+        +'<button class="action-btn clear-btn" onclick="clearResult()" title="Clear">'+svgX+'</button></div></div>'
         +'<div class="msg-scroll"><div class="msg-md-wrap" id="mdContent"></div></div>'
         +(badgeHtml?'<div class="msg-footer">'+badgeHtml+'</div>':'')
         +'</div>';
-      // Use MdViewer for rich rendering
+      // Render markdown — built-in fallback always works, MdViewer overrides if loaded
+      var mdEl=document.getElementById('mdContent');
+      mdRenderFallback(genText, mdEl);
       if(typeof window.MdRender==='function'){
-        window.MdRender(genText, document.getElementById('mdContent'));
-      }else{
-        // Fallback: plain text
-        document.getElementById('mdContent').innerHTML='<pre style="white-space:pre-wrap;font-family:inherit;margin:0;font-size:11px;color:var(--muted);line-height:1.6">'+esc(genText)+'</pre>';
+        // Rich renderer available — replace with full version
+        window.MdRender(genText, mdEl);
       }
     }else{d.innerHTML=''}
   }
@@ -251,6 +314,19 @@ function copyResult(){
     }
   }).catch(function(){});
 }
+var _savedResultH=0;
+function toggleMsgCard(){
+  var card=$('msgCard'); if(!card)return;
+  var collapsed=card.classList.toggle('collapsed');
+  var ra=$('resultArea');
+  if(collapsed){
+    // Save current height and let card auto-size
+    if(ra){_savedResultH=ra.style.height; ra.style.height='auto'; ra.style.flexShrink='0'}
+  }else{
+    // Restore height
+    if(ra&&_savedResultH){ra.style.height=_savedResultH; ra.style.flexShrink='0'}
+  }
+}
 function clearResult(){genText='';$('resultArea').innerHTML=''}
 var genTraceData='',auditOpen=false;
 function toggleAudit(){
@@ -259,8 +335,13 @@ function toggleAudit(){
   if(btn)btn.classList.toggle('active',auditOpen);
   if(area)area.classList.toggle('show',auditOpen);
   if(auditOpen && ac && typeof window.MdRender==='function'){
-    window.MdRender(genTraceData||'*No trace data yet.*', ac);
+    mdRenderFallback(genTraceData||'*No trace data yet.*', ac);
+    if(typeof window.MdRender==='function') window.MdRender(genTraceData||'*No trace data yet.*', ac);
   }
+}
+function toggleAuditCard(){
+  var card=$('auditCard'); if(!card)return;
+  card.classList.toggle('collapsed');
 }
 
 // Splitter — default 40%, max result = innerHeight-350px, min 10px
@@ -300,10 +381,10 @@ window.addEventListener('message',function(e){
     var b=$('genBtn');if(b){b.disabled=false;b.innerHTML='✨'}
     generating=false;
     genProvName=p.provider||'';genModelName=p.model||'';
-    // Build trace data for inspector
+    genTokens=p.tokens||0; genElapsed=p.elapsedMs||0; genTokPerSec=p.tokPerSec||0;
     genTraceData=p.trace||'*No trace data available.*';
     // If audit is open, refresh it with new trace
-    if(auditOpen){ var ac=$('auditContent'); if(ac&&typeof window.MdRender==='function')window.MdRender(genTraceData,ac); }
+    if(auditOpen){ var ac=$('auditContent'); if(ac){mdRenderFallback(genTraceData,ac); if(typeof window.MdRender==='function')window.MdRender(genTraceData,ac);} }
     if(p.error){genText='';renderResult('error',p.error)}
     else{genText=p.text||genText;renderResult('')}
   }

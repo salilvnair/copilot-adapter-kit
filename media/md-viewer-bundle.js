@@ -7664,6 +7664,9 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   padding: 10px 13px;
   overflow-x: auto;
   background: transparent !important;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .mdv-root pre code.hljs {
   background: transparent !important;
@@ -7671,6 +7674,9 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace;
   font-size: 11px;
   line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* hljs atom-one-dark */

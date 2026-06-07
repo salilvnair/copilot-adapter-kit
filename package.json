@@ -3,7 +3,7 @@
   "displayName": "Copilot Adapter Kit",
   "description": "Plugin-based provider mesh for Copilot Chat. BYOK, zero config.",
   "icon": "resources/icon.png",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "salilvnair",
   "license": "MIT",
   "author": "salilvnair",
@@ -132,7 +132,7 @@
               },
               "modelAlias": {
                 "type": "object",
-                "description": "Map picker model IDs → provider model names.",
+                "description": "Map picker model IDs \u2192 provider model names.",
                 "additionalProperties": true
               }
             }
@@ -248,6 +248,12 @@
           "type": "string",
           "default": "",
           "description": "%copilot-adapter-kit.config.gitPrompt%"
+        },
+        "copilot-adapter-kit.maxDiffFiles": {
+          "type": "number",
+          "default": 500,
+          "minimum": 10,
+          "description": "%copilot-adapter-kit.config.maxDiffFiles%"
         }
       }
     }

@@ -158,6 +158,7 @@ export class SettingsPanel {
     const systemPrompt: string = config.get<string>('systemPrompt', '');
     const userPromptTemplate: string = config.get<string>('userPromptTemplate', '');
     const gitPrompt: string = config.get<string>('gitPrompt', '');
+    const maxDiffFiles: number = config.get<number>('maxDiffFiles', 500);
 
     // Merge overrides into built-in models
     const builtinModels = BUILTIN_CATALOG.map(m => {
@@ -195,7 +196,7 @@ export class SettingsPanel {
       type: 'state',
       payload: {
         providers, models, maxTokens, logLevel, stabilizeTools, hiddenBuiltins, hiddenCustomModels, modelOverrides, keys,
-        visionFallbackModel, visionFallbackAlways, systemPrompt, userPromptTemplate, gitPrompt,
+        visionFallbackModel, visionFallbackAlways, systemPrompt, userPromptTemplate, gitPrompt, maxDiffFiles,
         builtinModels, copilotModels,
         engineFamilies: KNOWN_FAMILIES.map(f => ({ family: f.family, label: f.label, defaultUrl: f.defaultUrl, desc: f.desc })),
       },
@@ -586,11 +587,38 @@ export class SettingsPanel {
     }
   }
 
+  private async _buildDiff(which: string): Promise<{ diff: string; fileCount: number; compressed: boolean }> {
+    const threshold = vscode.workspace.getConfiguration('copilot-adapter-kit').get<number>('maxDiffFiles', 500);
+    const flag = which === 'staged' ? '--cached' : '';
+    const files = (await this._runGit('diff ' + flag + ' --name-only')).trim().split('\n').filter(Boolean);
+    const fileCount = files.length;
+
+    if (fileCount > threshold) {
+      const stat = (await this._runGit('diff ' + flag + ' --stat')).trim();
+      const numstat = (await this._runGit('diff ' + flag + ' --numstat')).trim();
+      const label = which === 'staged' ? 'Staged' : 'Unstaged';
+      const diff = [
+        '## Compressed Diff (' + fileCount + ' files changed, threshold: ' + threshold + ')',
+        '### ' + label + ' (' + fileCount + ' files)',
+        '```',
+        stat,
+        '```',
+        '',
+        '### Numstat',
+        '```',
+        numstat,
+        '```',
+      ].join('\n');
+      return { diff, fileCount, compressed: true };
+    }
+
+    const diff = (await this._runGit('diff ' + flag)).trim();
+    return { diff, fileCount, compressed: false };
+  }
+
   private async _execAndGen(which: string, chosenFamily?: string): Promise<void> {
-    // Fetch git diff automatically, then call _genCommitMsg
-    const diff = which === 'staged'
-      ? (await this._runGit('diff --cached')).trim()
-      : (await this._runGit('diff')).trim();
+    // Fetch git diff automatically (with compression for large changes), then call _genCommitMsg
+    const { diff, fileCount, compressed } = await this._buildDiff(which);
 
     if (!diff) {
       const branch = (await this._runGit('rev-parse --abbrev-ref HEAD')).trim();
@@ -610,10 +638,10 @@ export class SettingsPanel {
     }
 
     // Now generate the commit message (no gitState — user didn't click Fetch Git Status)
-    await this._genCommitMsg(diff, chosenFamily);
+    await this._genCommitMsg(diff, chosenFamily, fileCount, compressed);
   }
 
-  private async _genCommitMsg(diff: string, chosenFamily?: string): Promise<void> {
+  private async _genCommitMsg(diff: string, chosenFamily?: string, fileCount?: number, compressed?: boolean): Promise<void> {
     if (!this.ctx) {
       this.panel.webview.postMessage({ type: 'genCommitMsgResult', payload: { error: 'Context not available.' } });
       return;
@@ -691,6 +719,10 @@ Generate only the commit message, nothing else.`;
       };
 
       // Build a debug trace for the webview — show EVERYTHING so user can debug
+      const threshold = vscode.workspace.getConfiguration('copilot-adapter-kit').get<number>('maxDiffFiles', 500);
+      const diffNote = compressed
+        ? `Diff Mode:      compressed (${fileCount} files > ${threshold} threshold)`
+        : `Diff Mode:      full (${fileCount || 0} files)`;
       const trace = [
         `Provider:       ${providerName} (${family})`,
         `Base URL:       ${baseUrl}${apiPath}`,
@@ -698,6 +730,7 @@ Generate only the commit message, nothing else.`;
         `Key:            ${key.slice(0, 8)}...${key.slice(-4)}`,
         `Branch:         ${branch}`,
         `Repo:           ${repo}`,
+        `${diffNote}`,
         `System Prompt:  ${systemPromptConfig ? '(' + systemPromptConfig.length + ' chars) ' + systemPromptConfig : '(none — using default)'}`,
         `User Template:  ${userTemplateConfig ? '(' + userTemplateConfig.length + ' chars) ' + userTemplateConfig : '(none)'}`,
         `Git Prompt Cfg: ${gitPromptConfig ? '(' + gitPromptConfig.length + ' chars) ' + gitPromptConfig : '(none — using built-in default)'}`,
