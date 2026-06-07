@@ -152,18 +152,41 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["id", "family"],
+              "required": [
+                "id",
+                "family"
+              ],
               "properties": {
-                "id": { "type": "string" },
-                "name": { "type": "string" },
-                "family": { "type": "string" },
-                "version": { "type": "string" },
-                "detail": { "type": "string" },
-                "maxIn": { "type": "number" },
-                "maxOut": { "type": "number" },
-                "image": { "type": "boolean" },
-                "thinking": { "type": "boolean" },
-                "pricing": { "type": "string" }
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "family": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                },
+                "maxIn": {
+                  "type": "number"
+                },
+                "maxOut": {
+                  "type": "number"
+                },
+                "image": {
+                  "type": "boolean"
+                },
+                "thinking": {
+                  "type": "boolean"
+                },
+                "pricing": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -248,5 +271,9 @@
     "svgicons2svgfont": "^16.0.0",
     "ttf2woff": "^3.0.0",
     "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "highlight.js": "^11.11.1",
+    "marked": "^18.0.5"
   }
 }

@@ -14,9 +14,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .input-area textarea{flex:1;background:var(--input);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 34px 7px 8px;font-size:11px;font-family:inherit;resize:none;height:38px;outline:none;line-height:1.4}
 .input-area textarea:focus{border-color:var(--primary);box-shadow:0 0 0 2px rgba(99,102,241,.15)}
 .input-area textarea::placeholder{color:var(--muted)}
-.sparkle-btn{position:absolute;right:3px;top:50%;transform:translateY(-50%);background:var(--primary);color:#fff;border:none;border-radius:5px;width:26px;height:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;transition:all 120ms;z-index:2}
-.sparkle-btn:hover{background:rgba(99,102,241,.9)}
-.sparkle-btn:disabled{opacity:.4;cursor:not-allowed}
+.sparkle-btn{position:absolute;right:3px;top:50%;transform:translateY(-50%);background:transparent;color:rgba(255,255,255,.25);border:none;border-radius:5px;width:26px;height:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;transition:all 120ms;z-index:2}
+.sparkle-btn:hover{background:rgba(99,102,241,.12);color:rgba(255,255,255,.85)}
+.sparkle-btn:disabled{opacity:.3;cursor:not-allowed}
 .spinner{animation:spin .8s linear infinite}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .dd-row{padding:8px 8px 4px;display:flex;align-items:center;gap:8px;font-size:10px;color:var(--muted);flex-shrink:0}
@@ -55,11 +55,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .msg-card .card-actions .copy-btn.copied{color:var(--success)!important}
 .msg-card .card-actions .clear-btn{color:rgba(255,255,255,.35)}
 .msg-card .card-actions .clear-btn:hover{color:var(--error);background:rgba(239,68,68,.15)}
-.msg-card .msg-subject{font-size:13px;font-weight:700;color:#f4f4f5;margin-bottom:8px;padding-right:44px;line-height:1.3}
-.msg-card .msg-body{font-size:11px;color:var(--muted);white-space:pre-wrap;line-height:1.6}
-.msg-card .msg-body ul,.msg-card .msg-body ol{padding-left:16px;margin:4px 0}
-.msg-card .msg-body li{margin:2px 0}
-.msg-card .msg-body li::marker{color:rgba(99,102,241,.5)}
+.msg-card .msg-md-wrap{font-size:12.5px;line-height:1.7;color:#e4e4e7;padding-right:44px}
 .msg-card .card-badge{display:inline-flex;align-items:center;gap:4px;font-size:9px;padding:2px 8px;border-radius:999px;font-weight:600;margin-top:10px}
 .splitter-wrap{position:relative;flex-shrink:0;z-index:10}
 .splitter-bar{height:6px;cursor:row-resize;display:flex;align-items:center;justify-content:center;user-select:none}
@@ -171,7 +167,7 @@ function doGenerate(){
   var msg=$('msgInput').value.trim();
   generating=true;genText='';
   renderResult('loading');
-  vsc.postMessage({type:'generate',payload:{family:genFamily,modelId:genModel,userMsg:msg}});
+  vsc.postMessage({type:'generate',payload:{uuid:genFamily,modelId:genModel,userMsg:msg}});
 }
 
 function renderDiff(){
@@ -212,13 +208,7 @@ function renderResult(mode,errMsg){
   }else{
     if(genText){
       var lines=genText.split('\n'),subject=lines[0]||'',body=lines.slice(1).join('\n').trim();
-      var bodyHtml='';
-      if(body){
-        bodyHtml=body.replace(/^- (.+)$/gm,'<li>$1</li>');
-        var hasLi=bodyHtml.indexOf('<li>')>=0;
-        if(hasLi)bodyHtml='<ul>'+bodyHtml+'</ul>';
-        else bodyHtml='<div class="msg-body">'+esc(body)+'</div>';
-      }
+      // Build badge HTML
       var badgeHtml='';
       if(genProvName){
         var ph=0;for(var pi=0;pi<genProvName.length;pi++)ph=((ph<<5)-ph)+genProvName.charCodeAt(pi);
@@ -232,13 +222,18 @@ function renderResult(mode,errMsg){
       var svgCopy='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
       var svgX='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
       d.innerHTML='<div class="msg-card">'
-        +'<div class="card-actions"><button class="copy-btn" id="copyIcon" onclick="copyResult()" title="Copy">'+svgCopy+'</button>'
+        +'<div class="card-actions"><button class="copy-btn" id="copyIcon" onclick="copyResult()" title="Copy raw markdown">'+svgCopy+'</button>'
         +'<button class="clear-btn" onclick="clearResult()" title="Clear">'+svgX+'</button></div>'
-        +'<div class="msg-scroll"><div class="msg-subject">'+esc(subject)+'</div>'
-        +bodyHtml
-        +'</div>'
+        +'<div class="msg-scroll"><div class="msg-md-wrap" id="mdContent"></div></div>'
         +(badgeHtml?'<div class="msg-footer">'+badgeHtml+'</div>':'')
         +'</div>';
+      // Use MdViewer for rich rendering
+      if(typeof window.MdRender==='function'){
+        window.MdRender(genText, document.getElementById('mdContent'));
+      }else{
+        // Fallback: plain text
+        document.getElementById('mdContent').innerHTML='<pre style="white-space:pre-wrap;font-family:inherit;margin:0;font-size:11px;color:var(--muted);line-height:1.6">'+esc(genText)+'</pre>';
+      }
     }else{d.innerHTML=''}
   }
 }
@@ -285,7 +280,7 @@ window.addEventListener('message',function(e){
     renderDiff();
   }else if(t==='providers'){
     var fams=p.families||[];
-    var popts=fams.map(function(f){return{v:f.family,l:f.name}});
+    var popts=fams.map(function(f){return{v:f.uuid,l:f.name}});
     if(!ddProv){ddProv=ddMake('ddProv',popts,popts[0]?popts[0].v:'',function(v){genFamily=v;populateModels()})}
     else{ddProv.setOptions(popts);ddProv.value=popts[0]?popts[0].v:'';ddProv.refresh()}
     genFamily=popts[0]?popts[0].v:'';

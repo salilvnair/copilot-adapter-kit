@@ -145,7 +145,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="sidebar-section" style="margin-top:4px">Tools</div>
 <div class="sidebar-tab" data-tab="json"><span class="tab-icon">{ }</span>JSON Settings</div>
 <div class="sidebar-tab" data-tab="dumps"><span class="tab-icon">📂</span>Request Dumps</div>
-<div class="sidebar-section" style="margin-top:4px">Tools</div>
 <div class="sidebar-tab" data-tab="tools"><span class="tab-icon">🛠️</span>Git Tools</div>
 <div class="sidebar-section" style="margin-top:4px">Danger</div>
 <div class="sidebar-tab" data-tab="devtools"><span class="tab-icon">🛠️</span>Dev Tools</div>
@@ -859,8 +858,7 @@ function updBadges(){const provs=Object.values(st.providers).filter(p=>p&&!p._de
 function gid(id){return document.getElementById(id)}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')}
 
-window.addEventListener('message',e=>{if(e.data.type==='state'){st=e.data.payload;render()}else if(e.data.type==='gitState'){st.gitStaged=e.data.payload.staged;st.gitUnstaged=e.data.payload.unstaged;st.gitStatusShort=e.data.payload.statusShort;st.gitBranch=e.data.payload.branch;st.gitRepo=e.data.payload.repo;render()}else if(e.data.type==='gitError'){toast('❌ '+e.data.payload)}else if(e.data.type==='genCommitMsgResult'){renderGenResult(e.data.payload)}});
-window.addEventListener('message',e=>{if(e.data.type==='state'){st=e.data.payload;const provs=Object.keys(st.providers||{}).filter(k=>st.providers[k]&&!st.providers[k]._deleted);if(modelFilter&&!provs.includes(modelFilter))modelFilter=provs[0]||'';render()}});
+window.addEventListener('message',e=>{if(e.data.type==='state'){st=e.data.payload;const provs=Object.keys(st.providers||{}).filter(k=>st.providers[k]&&!st.providers[k]._deleted);if(modelFilter&&!provs.includes(modelFilter))modelFilter=provs[0]||'';render()}else if(e.data.type==='gitState'){st.gitStaged=e.data.payload.staged;st.gitUnstaged=e.data.payload.unstaged;st.gitStatusShort=e.data.payload.statusShort;st.gitBranch=e.data.payload.branch;st.gitRepo=e.data.payload.repo;render()}else if(e.data.type==='gitError'){toast('❌ '+e.data.payload)}else if(e.data.type==='genCommitMsgResult'){renderGenResult(e.data.payload)}});
 vsc.postMessage({type:'getState'});
 document.getElementById('icoProv').innerHTML = iGlobe();
 </script>

@@ -18,13 +18,21 @@ export class MiniGitPanel implements vscode.WebviewViewProvider {
     wv.webview.html = this._html();
     wv.webview.onDidReceiveMessage(async (m: { type: string; payload?: any }) => {
       if (m.type === 'getData') { this._sendProvidersAndModels(); await this._refreshGit(); }
-      else if (m.type === 'generate') await this._generate(m.payload?.family, m.payload?.modelId, m.payload?.userMsg);
+      else if (m.type === 'generate') await this._generate(m.payload?.uuid, m.payload?.modelId, m.payload?.userMsg);
     });
     setTimeout(() => { this._refreshGit(); this._sendProvidersAndModels(); }, 300);
   }
 
   private _html(): string {
-    try { return readFileSync(join(this.ext.extensionPath, 'media', 'mini-git-panel.html'), 'utf-8'); }
+    try {
+      let html = readFileSync(join(this.ext.extensionPath, 'media', 'mini-git-panel.html'), 'utf-8');
+      // Inject MdViewer bundle as inline script (satisfies CSP)
+      try {
+        const bundle = readFileSync(join(this.ext.extensionPath, 'media', 'md-viewer-bundle.js'), 'utf-8');
+        html = html.replace('</body>', '<script>' + bundle + '</script></body>');
+      } catch { /* bundle not built yet — MdViewer unavailable */ }
+      return html;
+    }
     catch { return '<html><body style="color:#d4d4d4;background:#1e1e1e;padding:24px"><h2>Panel not found</h2></body></html>'; }
   }
 
@@ -35,11 +43,16 @@ export class MiniGitPanel implements vscode.WebviewViewProvider {
   private _sendProvidersAndModels(): void {
     const cfg = vscode.workspace.getConfiguration('copilot-adapter-kit');
     const pv = cfg.get<Record<string, any>>('providers') || {};
-    const fams = Object.keys(pv).map(f => ({ family: f, name: pv[f].name || f }));
+    // UUID-keyed providers matching settings-panel data model
+    const fams = Object.entries(pv)
+      .filter(([,p]) => p && !p._deleted)
+      .map(([uuid, p]) => ({ uuid, family: p.family || '', name: p.name || p.family || uuid }));
     this.view?.webview.postMessage({ type: 'providers', payload: { families: fams } });
     const cat = resolveCatalog();
     const mb: Record<string, { id: string; name: string }[]> = {};
-    for (const fam of fams) mb[fam.family] = cat.filter(m => m.family === fam.family).map(m => ({ id: m.id, name: m.name }));
+    for (const fam of fams) {
+      mb[fam.uuid] = cat.filter(m => m.family === fam.family).map(m => ({ id: m.id, name: m.name }));
+    }
     this.view?.webview.postMessage({ type: 'models', payload: { modelsByFamily: mb } });
   }
 
@@ -55,15 +68,15 @@ export class MiniGitPanel implements vscode.WebviewViewProvider {
     } catch { this.view.webview.postMessage({ type: 'gitData', payload: {} }); }
   }
 
-  private async _generate(chosenFamily?: string, chosenModel?: string, userMsg?: string): Promise<void> {
+  private async _generate(chosenUuid?: string, chosenModel?: string, userMsg?: string): Promise<void> {
     if (!this.view || !this.ctx) return;
     const cfg = vscode.workspace.getConfiguration('copilot-adapter-kit');
     const pv = cfg.get<Record<string, any>>('providers') || {};
-    const fams = Object.keys(pv);
-    if (!fams.length) { this.view.webview.postMessage({ type: 'genResult', payload: { error: 'No providers configured.' } }); return; }
-    const family = (chosenFamily && pv[chosenFamily]) ? chosenFamily : fams[0];
-    const prov = pv[family];
-    const key = await this.ext.secrets.get(`copilot-adapter-kit.apiKey.${family}`);
+    if (!Object.keys(pv).length) { this.view.webview.postMessage({ type: 'genResult', payload: { error: 'No providers configured.' } }); return; }
+    const uuid = (chosenUuid && pv[chosenUuid]) ? chosenUuid : Object.keys(pv).find(k => pv[k] && !pv[k]._deleted) || Object.keys(pv)[0];
+    const prov = pv[uuid];
+    const family = prov.family || uuid;
+    const key = await this.ext.secrets.get(`copilot-adapter-kit.apiKey.${uuid}`);
     if (!key) { this.view.webview.postMessage({ type: 'genResult', payload: { error: `No API key for "${prov.name || family}".` } }); return; }
     try {
       const staged = (await this._runGit('diff --cached')).trim();
