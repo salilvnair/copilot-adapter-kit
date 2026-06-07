@@ -82,10 +82,15 @@ export class MiniGitPanel implements vscode.WebviewViewProvider {
       const fms = cat.filter(m => m.family === family);
       const model = (chosenModel && chosenModel !== 'auto' && chosenModel !== '') ? chosenModel : (fms.length > 0 ? fms[0].id : 'gpt-4o');
       const ap = prov.defaultApiPath || '/chat/completions';
+      const baseUrl = prov.baseUrl || '';
+      const apiPath = ap;
       const payload: Payload = { model, messages: [{ role: 'user', content: prompt }], stream: true, max_tokens: 2048, apiPath: ap };
       const wrapped = this.ctx.pipeline.wrap(engine);
       let text = '', settled = false;
-      const done = (r: { text?: string; error?: string }) => { if (settled) return; settled = true; this.view?.webview.postMessage({ type: 'genResult', payload: { ...r, provider: prov.name || family, model } }); };
+      const sysP = cfg.get<string>('systemPrompt', '');
+      const usrT = cfg.get<string>('userPromptTemplate', '');
+      const trace = `Provider: ${prov.name || family}\nModel: ${model}\nBase URL: ${baseUrl}${apiPath}\nAPI Key: ${key.slice(0,8)}...${key.slice(-4)}\nBranch: ${branch}\nRepo: ${repo}\nSystem Prompt: ${sysP ? 'custom (' + sysP.length + ' chars)' : '(none)'}\nUser Template: ${usrT ? 'custom (' + usrT.length + ' chars)' : '(none)'}\nGit Prompt Config: ${gpc ? 'custom (' + gpc.length + ' chars)' : '(built-in default)'}\nUser Guidance: ${userMsg?.trim() || '(none)'}\nPrompt (first 500 chars): ${prompt.slice(0,500)}`;
+      const done = (r: { text?: string; error?: string }) => { if (settled) return; settled = true; this.view?.webview.postMessage({ type: 'genResult', payload: { ...r, provider: prov.name || family, model, trace } }); };
       const sink: StreamEvents = {
         onToken: t => { text += t; this.view?.webview.postMessage({ type: 'genToken', payload: t }); },
         onThinking: () => {}, onToolSignal: () => {},
