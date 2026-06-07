@@ -47,25 +47,43 @@ export class SettingsPanel {
           await this._sendState();
           break;
         case 'setApiKey':
-          await this._setApiKey(msg.payload?.family, msg.payload?.key);
+          await this._setApiKey(msg.payload?.uuid, msg.payload?.key);
           break;
         case 'clearApiKey':
-          await this._clearApiKey(msg.payload?.family);
+          await this._clearApiKey(msg.payload?.uuid);
           break;
         case 'saveConfig':
           await this._saveConfig(msg.payload?.key, msg.payload?.value);
           break;
         case 'saveProvider':
-          await this._saveProvider(msg.payload?.family, msg.payload?.config);
+          await this._saveProvider(msg.payload?.uuid, msg.payload?.config);
+          break;
+        case 'duplicateProvider':
+          await this._duplicateProvider(msg.payload?.uuid);
           break;
         case 'removeProvider':
-          await this._removeProvider(msg.payload?.family);
+          await this._removeProvider(msg.payload?.uuid);
           break;
         case 'saveModel':
           await this._saveModel(msg.payload);
           break;
         case 'removeModel':
-          await this._removeModel(msg.payload?.id, msg.payload?.family);
+          await this._removeModel(msg.payload?.parentUuid, msg.payload?.uuid);
+          break;
+        case 'restoreProvider':
+          await this._restoreProvider(msg.payload?.uuid);
+          break;
+        case 'restoreModel':
+          await this._restoreModel(msg.payload?.parentUuid, msg.payload?.uuid);
+          break;
+        case 'permDeleteProvider':
+          await this._permDeleteProvider(msg.payload?.uuid);
+          break;
+        case 'permDeleteModel':
+          await this._permDeleteModel(msg.payload?.parentUuid, msg.payload?.uuid);
+          break;
+        case 'clearBin':
+          await this._clearBin();
           break;
         case 'toggleBuiltin':
           await this._toggleBuiltin(msg.payload?.id);
@@ -128,7 +146,7 @@ export class SettingsPanel {
   private async _sendState(): Promise<void> {
     const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
     const providers = config.get<Record<string, any>>('providers') || {};
-    const models = config.get<any[]>('models') || [];
+    const models = config.get<Record<string, any[]>>('models') || {};
     const maxTokens = config.get<number>('maxTokens', 0);
     const logLevel = config.get<string>('logLevel', 'quiet');
     const stabilizeTools = config.get<boolean>('stabilizeTools', false);
@@ -163,13 +181,14 @@ export class SettingsPanel {
       ];
     }
 
-    // Per-family keys — only check the registered families
+    // Per-provider keys — keyed by provider UUID
     const keys: Record<string, boolean> = {};
-    for (const [fam, p] of Object.entries(providers)) {
+    for (const [k, p] of Object.entries(providers)) {
       try {
-        const k = await this.ext.secrets.get(`copilot-adapter-kit.apiKey.${fam}`);
-        keys[fam] = !!k;
-      } catch { keys[fam] = false; }
+        const keyId = `copilot-adapter-kit.apiKey.${k}`;
+        const keyVal = await this.ext.secrets.get(keyId);
+        keys[k] = !!keyVal;
+      } catch { keys[k] = false; }
     }
 
     this.panel.webview.postMessage({
@@ -183,15 +202,15 @@ export class SettingsPanel {
     });
   }
 
-  private async _setApiKey(family: string, key: string): Promise<void> {
-    await this.ext.secrets.store(`copilot-adapter-kit.apiKey.${family}`, key.trim());
-    // secrets.onDidChange fires automatically → bridge refreshes
+  private async _setApiKey(uuid: string, key: string): Promise<void> {
+    const keyId = `copilot-adapter-kit.apiKey.${uuid}`;
+    await this.ext.secrets.store(keyId, key.trim());
     await this._sendState();
   }
 
-  private async _clearApiKey(family: string): Promise<void> {
-    await this.ext.secrets.delete(`copilot-adapter-kit.apiKey.${family}`);
-    // secrets.onDidChange fires automatically
+  private async _clearApiKey(uuid: string): Promise<void> {
+    const keyId = `copilot-adapter-kit.apiKey.${uuid}`;
+    await this.ext.secrets.delete(keyId);
     await this._sendState();
   }
 
@@ -201,51 +220,259 @@ export class SettingsPanel {
     await this._sendState();
   }
 
-  private async _saveProvider(family: string, providerConfig: any): Promise<void> {
+  private _uuid(): string { return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+
+  private _copyName(name: string): string {
+    return /\s\(copy\)$/i.test(name) ? name : `${name} (copy)`;
+  }
+
+  // ---- model helpers (map-of-arrays storage) ----
+
+  private _modelsMap(): Record<string, any[]> {
+    const raw = vscode.workspace.getConfiguration('copilot-adapter-kit').get<unknown>('models');
+    if (!raw || Array.isArray(raw)) return {}; // migrate legacy array → empty map
+    if (typeof raw === 'object') return raw as Record<string, any[]>;
+    return {};
+  }
+
+  private async _saveModelsMap(map: Record<string, any[]>): Promise<void> {
+    await vscode.workspace.getConfiguration('copilot-adapter-kit')
+      .update('models', map, vscode.ConfigurationTarget.Global);
+  }
+
+  /** Find a model by uuid or _key. Returns [parentUuid, indexInArray] or null. */
+  private _findModel(uuidOrKey: string): [string, number] | null {
+    const map = this._modelsMap();
+    for (const [puid, arr] of Object.entries(map)) {
+      if (!Array.isArray(arr)) continue;
+      const idx = arr.findIndex((m: any) => m?.uuid === uuidOrKey || m?._key === uuidOrKey);
+      if (idx >= 0) return [puid, idx];
+    }
+    return null;
+  }
+
+  // ---- provider CRUD ----
+
+  private async _saveProvider(uuid: string, providerConfig: any): Promise<void> {
     const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
     const providers = { ...(config.get<Record<string, any>>('providers') || {}) };
-    providers[family] = providerConfig;
+    const key = uuid || this._uuid();
+    const existing = providers[key];
+    providers[key] = {
+      ...providerConfig,
+      uuid: key,
+      family: providerConfig.family || existing?.family || '',
+    };
     await config.update('providers', providers, vscode.ConfigurationTarget.Global);
     await this._sendState();
   }
 
-  private async _removeProvider(family: string): Promise<void> {
+  private async _duplicateProvider(uuid: string): Promise<void> {
+    if (!uuid) return;
     const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
+    const providers = { ...(config.get<Record<string, any>>('providers') || {}) };
+    const source = providers[uuid];
+    if (!source) { await this._sendState(); return; }
 
-    // VS Code merges objects on update — set key to undefined to actually delete it
-    await config.update('providers', { [family]: undefined }, vscode.ConfigurationTarget.Global);
+    const newUuid = this._uuid();
+    providers[newUuid] = {
+      ...source,
+      uuid: newUuid,
+      name: this._copyName(source.name || source.family || uuid),
+      family: source.family || '',
+      _deleted: false,
+    };
+    delete (providers[newUuid] as any).engineFamily;
+    await config.update('providers', providers, vscode.ConfigurationTarget.Global);
 
-    // Cascade: remove all models for this family
-    const models = (config.get<any[]>('models') || []) as any[];
-    const filtered = models.filter((m: any) => m?.family !== family);
-    await config.update('models', filtered, vscode.ConfigurationTarget.Global);
-
-    // Cascade: remove the API key
-    try { await this.ext.secrets.delete(`copilot-adapter-kit.apiKey.${family}`); } catch { /* ok */ }
-
-    // Cascade: clean hiddenCustomModels entries for this family
-    const hiddenCustom: string[] = config.get<string[]>('hiddenCustomModels') || [];
-    const cleaned = hiddenCustom.filter(k => !k.startsWith(`${family}:`));
-    await config.update('hiddenCustomModels', cleaned, vscode.ConfigurationTarget.Global);
-
+    // Clone child models into new parentUuid bucket
+    const raw = config.get<Record<string,any[]>>('models');
+    const map: Record<string,any[]> = (raw && !Array.isArray(raw) && typeof raw === 'object') ? { ...raw } : {};
+    const srcArr = map[uuid] || [];
+    const toClone = srcArr.filter((m: any) => m && !m._deleted);
+    if (toClone.length > 0) {
+      const clones = toClone.map((m: any) => ({
+        ...m,
+        uuid: this._uuid(),
+        _key: this._uuid(),
+        _deleted: false,
+        name: this._copyName(m.name || m.id),
+      }));
+      map[newUuid] = clones;
+      await config.update('models', map, vscode.ConfigurationTarget.Global);
+    }
     await this._sendState();
   }
+
+  private async _removeProvider(uuid: string): Promise<void> {
+    const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
+    const providers = { ...(config.get<Record<string,any>>('providers') || {}) };
+    const prov = providers[uuid];
+    if (prov) {
+      providers[uuid] = { ...prov, _deleted: true };
+      await config.update('providers', providers, vscode.ConfigurationTarget.Global);
+      // Cascade soft-delete child models
+      const raw = config.get<Record<string,any[]>>('models');
+      if (raw && !Array.isArray(raw) && typeof raw === 'object') {
+        const map = { ...raw };
+        const arr = map[uuid];
+        if (arr) {
+          map[uuid] = arr.map((m: any) => m ? { ...m, _deleted: true } : m);
+          await config.update('models', map, vscode.ConfigurationTarget.Global);
+        }
+      }
+    }
+    await this._sendState();
+  }
+
+  // ---- model CRUD (map-of-arrays) ----
 
   private async _saveModel(entry: any): Promise<void> {
+    const parentUuid = entry.parentUuid || entry._provUuid;
+    if (!parentUuid) {
+      vscode.window.showErrorMessage('CAK: Cannot save model — no provider selected.');
+      await this._sendState();
+      return;
+    }
+
     const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
-    const existing = (config.get<any[]>('models') || []) as any[];
-    const idx = existing.findIndex((m: any) => m?.id === entry.id && m?.family === entry.family);
-    if (idx >= 0) { existing[idx] = entry; }
-    else { existing.push(entry); }
-    await config.update('models', existing, vscode.ConfigurationTarget.Global);
+    const raw = config.get<Record<string,any[]>>('models');
+    const map: Record<string,any[]> = (raw && !Array.isArray(raw) && typeof raw === 'object') ? { ...raw } : {};
+    const arr = [...(map[parentUuid] || [])];
+
+    // Find existing by uuid > _key
+    let idx = entry.uuid ? arr.findIndex((m: any) => m?.uuid === entry.uuid) : -1;
+    if (idx < 0 && entry._key) idx = arr.findIndex((m: any) => m?._key === entry._key);
+    if (idx < 0 && !entry._key) {
+      idx = arr.findIndex((m: any) => m?.id === entry.id && m?.family === entry.family);
+    }
+
+    const model = {
+      ...entry,
+      parentUuid,
+      uuid: entry.uuid || this._uuid(),
+      _key: entry._key || this._uuid(),
+      _deleted: entry._deleted ?? false,
+    };
+    delete (model as any)._provUuid;
+
+    if (idx >= 0) arr[idx] = model;
+    else arr.push(model);
+
+    map[parentUuid] = arr;
+    await config.update('models', map, vscode.ConfigurationTarget.Global);
     await this._sendState();
   }
 
-  private async _removeModel(id: string, family: string): Promise<void> {
+  private async _removeModel(parentUuid: string, uuid: string): Promise<void> {
     const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
-    const existing = (config.get<any[]>('models') || []) as any[];
-    const updated = existing.filter((m: any) => !(m?.id === id && m?.family === family));
-    await config.update('models', updated, vscode.ConfigurationTarget.Global);
+    const raw = config.get<Record<string,any[]>>('models');
+    if (!raw || Array.isArray(raw) || typeof raw !== 'object') return;
+    const map = { ...raw };
+    const arr = map[parentUuid];
+    if (arr) {
+      map[parentUuid] = arr.map((m: any) =>
+        (m?.uuid === uuid || m?._key === uuid) ? { ...m, _deleted: true } : m
+      );
+      await config.update('models', map, vscode.ConfigurationTarget.Global);
+    }
+    await this._sendState();
+  }
+
+  private async _restoreModel(parentUuid: string, uuid: string): Promise<void> {
+    const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
+    const raw = config.get<Record<string,any[]>>('models');
+    if (!raw || Array.isArray(raw) || typeof raw !== 'object') return;
+    const map = { ...raw };
+    const arr = map[parentUuid];
+    if (arr) {
+      map[parentUuid] = arr.map((m: any) =>
+        (m?.uuid === uuid || m?._key === uuid) ? { ...m, _deleted: false } : m
+      );
+      await config.update('models', map, vscode.ConfigurationTarget.Global);
+    }
+    await this._sendState();
+  }
+
+  private async _permDeleteModel(parentUuid: string, uuid: string): Promise<void> {
+    const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
+    const raw = config.get<Record<string,any[]>>('models');
+    if (!raw || Array.isArray(raw) || typeof raw !== 'object') return;
+    const map = { ...raw };
+    const arr = map[parentUuid];
+    if (arr) {
+      const filtered = arr.filter((m: any) => m?.uuid !== uuid && m?._key !== uuid);
+      if (filtered.length) map[parentUuid] = filtered;
+      else delete map[parentUuid];
+      await config.update('models', map, vscode.ConfigurationTarget.Global);
+    }
+    await this._sendState();
+  }
+
+  private async _restoreProvider(uuid: string): Promise<void> {
+    const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
+    const providers = { ...(config.get<Record<string,any>>('providers') || {}) };
+    const prov = providers[uuid];
+    if (prov) {
+      providers[uuid] = { ...prov, _deleted: false };
+      await config.update('providers', providers, vscode.ConfigurationTarget.Global);
+      // Cascade restore child models
+      const raw = config.get<Record<string,any[]>>('models');
+      if (raw && !Array.isArray(raw) && typeof raw === 'object') {
+        const map = { ...raw };
+        const arr = map[uuid];
+        if (arr) {
+          map[uuid] = arr.map((m: any) => m ? { ...m, _deleted: false } : m);
+          await config.update('models', map, vscode.ConfigurationTarget.Global);
+        }
+      }
+    }
+    await this._sendState();
+  }
+
+  private async _permDeleteProvider(uuid: string): Promise<void> {
+    const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
+    const providers = { ...(config.get<Record<string,any>>('providers') || {}) };
+    delete providers[uuid];
+    await config.update('providers', providers, vscode.ConfigurationTarget.Global);
+    // Remove child models
+    const raw = config.get<Record<string,any[]>>('models');
+    if (raw && !Array.isArray(raw) && typeof raw === 'object') {
+      const map = { ...raw };
+      delete map[uuid];
+      await config.update('models', map, vscode.ConfigurationTarget.Global);
+    }
+    // Remove API key
+    try { await this.ext.secrets.delete(`copilot-adapter-kit.apiKey.${uuid}`); } catch { /* ok */ }
+    await this._sendState();
+  }
+
+  private async _clearBin(): Promise<void> {
+    const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
+
+    // Providers: keep only non-deleted
+    const providers = config.get<Record<string, any>>('providers') || {};
+    const cleanedProv: Record<string, any> = {};
+    for (const [k, v] of Object.entries(providers)) {
+      if (v && !v._deleted) cleanedProv[k] = v;
+    }
+    await config.update('providers', cleanedProv, vscode.ConfigurationTarget.Global);
+
+    // Models: keep only non-deleted entries in each bucket, drop empty buckets
+    const raw = config.get<Record<string, any[]>>('models');
+    if (raw && !Array.isArray(raw) && typeof raw === 'object') {
+      const cleanedMod: Record<string, any[]> = {};
+      for (const [puid, arr] of Object.entries(raw)) {
+        if (!Array.isArray(arr)) continue;
+        const filtered = arr.filter((m: any) => m && !m._deleted);
+        if (filtered.length) cleanedMod[puid] = filtered;
+      }
+      await config.update('models', cleanedMod, vscode.ConfigurationTarget.Global);
+    } else {
+      // Legacy array or missing — just set to empty map
+      await config.update('models', {}, vscode.ConfigurationTarget.Global);
+    }
+
     await this._sendState();
   }
 
@@ -291,12 +518,15 @@ export class SettingsPanel {
   }
 
   private async _updateModelApiPath(id: string, family: string, apiPath: string): Promise<void> {
-    const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
-    const existing = (config.get<any[]>('models') || []) as any[];
-    const idx = existing.findIndex((m: any) => m?.id === id && m?.family === family);
-    if (idx >= 0) {
-      existing[idx] = { ...existing[idx], apiPath: apiPath || undefined };
-      await config.update('models', existing, vscode.ConfigurationTarget.Global);
+    const map = this._modelsMap();
+    for (const arr of Object.values(map)) {
+      if (!Array.isArray(arr)) continue;
+      const idx = arr.findIndex((m: any) => m?.id === id && m?.family === family);
+      if (idx >= 0) {
+        arr[idx] = { ...arr[idx], apiPath: apiPath || undefined };
+        await this._saveModelsMap(map);
+        break;
+      }
     }
     await this._sendState();
   }
@@ -304,8 +534,8 @@ export class SettingsPanel {
   private async _deleteAll(): Promise<void> {
     const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
     const providers = config.get<Record<string, any>>('providers') || {};
-    for (const fam of Object.keys(providers)) {
-      try { await this.ext.secrets.delete(`copilot-adapter-kit.apiKey.${fam}`); } catch { /* ok */ }
+    for (const uuid of Object.keys(providers)) {
+      try { await this.ext.secrets.delete(`copilot-adapter-kit.apiKey.${uuid}`); } catch { /* ok */ }
     }
     await config.update('providers', undefined, vscode.ConfigurationTarget.Global);
     await config.update('models', undefined, vscode.ConfigurationTarget.Global);

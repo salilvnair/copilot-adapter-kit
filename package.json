@@ -145,45 +145,25 @@
           "description": "%copilot-adapter-kit.config.maxTokens%"
         },
         "copilot-adapter-kit.models": {
-          "type": "array",
-          "default": [],
+          "type": "object",
+          "default": {},
           "description": "%copilot-adapter-kit.config.models%",
-          "items": {
-            "type": "object",
-            "required": [
-              "id",
-              "family"
-            ],
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              },
-              "family": {
-                "type": "string"
-              },
-              "version": {
-                "type": "string"
-              },
-              "detail": {
-                "type": "string"
-              },
-              "maxIn": {
-                "type": "number"
-              },
-              "maxOut": {
-                "type": "number"
-              },
-              "image": {
-                "type": "boolean"
-              },
-              "thinking": {
-                "type": "boolean"
-              },
-              "pricing": {
-                "type": "string"
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "family"],
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "family": { "type": "string" },
+                "version": { "type": "string" },
+                "detail": { "type": "string" },
+                "maxIn": { "type": "number" },
+                "maxOut": { "type": "number" },
+                "image": { "type": "boolean" },
+                "thinking": { "type": "boolean" },
+                "pricing": { "type": "string" }
               }
             }
           }

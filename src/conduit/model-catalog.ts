@@ -7,6 +7,10 @@ export interface ModelMeta {
   id: string; name: string; family: string; version: string;
   detail: string;
   tooltip?: string;
+  uuid?: string;
+  parentUuid?: string;
+  _key?: string;
+  _deleted?: boolean;
   maxIn: number;
   maxOut: number;
   image: boolean;
@@ -20,38 +24,49 @@ export interface ModelMeta {
 /** Built-in models per provider family. Empty by design — users add their own via the Panel UI or copilot-adapter-kit.models setting. */
 export const BUILTIN_CATALOG: ModelMeta[] = [];
 
-/** User-supplied models via copilot-adapter-kit.models setting. */
+/** User-supplied models via copilot-adapter-kit.models setting.
+ *  Models are keyed by parentUuid (provider UUID) — a map of arrays. */
 function loadUserModels(): ModelMeta[] {
   try {
-    const raw = vscode.workspace.getConfiguration('copilot-adapter-kit').get<unknown[]>('models');
-    if (!Array.isArray(raw)) return [];
-    return raw.filter((m): m is ModelMeta =>
-      typeof m === 'object' && m !== null &&
-      typeof (m as any).id === 'string' && (m as any).id.length > 0 &&
-      typeof (m as any).family === 'string' && (m as any).family.length > 0
-    ).map(m => ({
-      id:       (m as any).id,
-      name:     (m as any).name     || (m as any).id,
-      family:   (m as any).family,
-      version:  (m as any).version  || 'custom',
-      detail:   (m as any).detail   || 'User-defined model',
-      maxIn:    (m as any).maxIn    || 128000,
-      maxOut:   (m as any).maxOut   || 16384,
-      image:    (m as any).image    ?? true,
-      thinking: (m as any).thinking ?? false,
-      toolCalling: (m as any).toolCalling ?? 128,
-      apiPath:  (m as any).apiPath  || undefined,
-      visionFallback: (m as any).visionFallback || undefined,
-      pricing:  (m as any).pricing  || undefined,
-      tooltip:  (m as any).tooltip  || undefined,
-    }));
+    const raw = vscode.workspace.getConfiguration('copilot-adapter-kit').get<unknown>('models');
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+    const map = raw as Record<string, any[]>;
+    const flat: ModelMeta[] = [];
+    for (const [parentUuid, arr] of Object.entries(map)) {
+      if (!Array.isArray(arr)) continue;
+      for (const m of arr) {
+        if (!m || typeof m !== 'object') continue;
+        if (typeof (m as any).id !== 'string' || !(m as any).id) continue;
+        flat.push({
+          id:       (m as any).id,
+          name:     (m as any).name     || (m as any).id,
+          family:   (m as any).family   || '',
+          version:  (m as any).version  || 'custom',
+          detail:   (m as any).detail   || 'User-defined model',
+          maxIn:    (m as any).maxIn    || 128000,
+          maxOut:   (m as any).maxOut   || 16384,
+          image:    (m as any).image    ?? true,
+          thinking: (m as any).thinking ?? false,
+          toolCalling: (m as any).toolCalling ?? 128,
+          apiPath:  (m as any).apiPath  || undefined,
+          visionFallback: (m as any).visionFallback || undefined,
+          pricing:  (m as any).pricing  || undefined,
+          tooltip:  (m as any).tooltip  || undefined,
+          _key:     (m as any)._key     || undefined,
+          uuid:     (m as any).uuid     || undefined,
+          parentUuid: parentUuid,
+          _deleted: (m as any)._deleted || false,
+        });
+      }
+    }
+    return flat;
   } catch { return []; }
 }
 
 export function resolveCatalog(): ModelMeta[] {
   const userModels = loadUserModels();
   const hiddenCustom: string[] = vscode.workspace.getConfiguration('copilot-adapter-kit').get<string[]>('hiddenCustomModels') || [];
-  return userModels.filter(m => !hiddenCustom.includes(`${m.family}:${m.id}`));
+  return userModels.filter(m => !m._deleted && !hiddenCustom.includes(`${m.family}:${m.id}`));
 }
 
 export function metaToVscode(meta: ModelMeta, hasKey: boolean): vscode.LanguageModelChatInformation {

@@ -50,6 +50,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 .dropdown-wrap{position:relative}
 .dropdown-trigger{width:100%;padding:8px 12px;font-size:13px;background:var(--color-input-bg);border:1px solid var(--color-input-border);border-radius:8px;color:var(--color-text-primary);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:border-color 140ms,box-shadow 140ms;user-select:none}
+.dropdown-trigger.locked{opacity:.55;cursor:not-allowed;pointer-events:none}
 .dropdown-trigger.open{border-color:var(--color-primary);box-shadow:0 0 0 3px rgba(99,102,241,.15)}
 .dropdown-trigger.sm{padding:6px 10px;font-size:12px}
 .dropdown-arrow{font-size:10px;color:var(--color-text-muted);transition:transform 140ms}
@@ -118,6 +119,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .modal-title{font-size:15px;font-weight:700;margin-bottom:6px}
 .modal-body{font-size:13px;color:var(--color-text-secondary);margin-bottom:20px}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end}
+::selection{background:var(--color-primary);color:#fff}
+.kv-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.kv-table th{text-align:left;padding:6px 8px;color:var(--color-text-muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid rgba(255,255,255,.08)}
+.kv-table td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px}
+.kv-table code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px;font-size:11px}
+.kv-table tr:hover td{background:rgba(255,255,255,.02)}
 .hidden{display:none!important}
 ::-webkit-scrollbar{width:6px}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:3px}
@@ -141,6 +148,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="sidebar-section" style="margin-top:4px">Tools</div>
 <div class="sidebar-tab" data-tab="tools"><span class="tab-icon">🛠️</span>Git Tools</div>
 <div class="sidebar-section" style="margin-top:4px">Danger</div>
+<div class="sidebar-tab" data-tab="devtools"><span class="tab-icon">🛠️</span>Dev Tools</div>
+<div class="sidebar-section" style="margin-top:8px">Bin</div>
+<div class="sidebar-tab" data-tab="bin"><span class="tab-icon">🗑️</span>Bin<span class="tab-badge" id="binCount">0</span></div>
+<div class="sidebar-section" style="margin-top:8px">Danger</div>
 <div class="sidebar-tab" data-tab="danger"><span class="tab-icon">⚠️</span>Danger Zone</div>
 </div>
 <div class="content" id="content"></div>
@@ -154,6 +165,7 @@ let active='providers';
 
 // SVG icons — exact Daakia paths (24x24 viewBox, rendered at 14px)
 function iTrash(c){const s=c||'var(--color-error)';return`<svg class="icon-svg" style="stroke:${s};fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`}
+function iCopy(){return`<svg class="icon-svg" style="stroke:var(--color-text-secondary);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`}
 function iEdit(){return`<svg class="icon-svg" style="stroke:var(--color-text-secondary);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round" viewBox="0 0 24 24"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>`}
 function iEye(){return`<svg class="icon-svg" style="stroke:var(--color-success);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`}
 function iEyeOff(){return`<svg class="icon-svg" style="stroke:var(--color-text-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`}
@@ -171,37 +183,42 @@ document.getElementById('sidebar').addEventListener('click',e=>{
 
 function render(){
   const c=document.getElementById('content');
-  switch(active){case'providers':c.innerHTML=rProv();break;case'models':c.innerHTML=rMod();break;case'keys':c.innerHTML=rKeys();break;case'config':c.innerHTML=rCfg();break;case'json':c.innerHTML=rJson();break;case'dumps':c.innerHTML=rDmp();break;case'danger':c.innerHTML=rDanger();break;case'tools':c.innerHTML=rTools();break;}
+  switch(active){case'providers':c.innerHTML=rProv();break;case'models':c.innerHTML=rMod();break;case'keys':c.innerHTML=rKeys();break;case'config':c.innerHTML=rCfg();break;case'json':c.innerHTML=rJson();break;case'dumps':c.innerHTML=rDmp();break;case'danger':c.innerHTML=rDanger();break;case'bin':c.innerHTML=rBin();break;case'devtools':c.innerHTML=rDev();}
   updBadges();rebindDD();
 }
 
 // --- Providers ---
 function rProv(){
-  const e=Object.entries(st.providers);
-  const cards=e.map(([f,cfg])=>`<div class="provider-card">
-    <div class="provider-info"><div class="provider-name"><span class="badge badge-primary" style="margin-right:6px">${esc(f)}</span>${esc(cfg.name||f)}${st.keys[f]?' <span class="badge badge-success">🔑 key set</span>':' <span class="badge badge-warning">no key</span>'}</div><div class="provider-url">${esc(cfg.baseUrl||'')}</div></div>
+  const e=Object.entries(st.providers).filter(([,p])=>p&&!p._deleted);
+  const cards=e.map(([uuid,cfg])=>`<div class="provider-card">
+    <div class="provider-info"><div class="provider-name"><span class="badge badge-primary" style="margin-right:6px">${esc(cfg.family||'')}</span>${esc(cfg.name||cfg.family||uuid)}${st.keys[uuid]?' <span class="badge badge-success">🔑 key set</span>':' <span class="badge badge-warning">no key</span>'}</div><div class="provider-url">${esc(cfg.baseUrl||'')}</div></div>
     <div class="provider-actions">
-      <button class="btn btn-sm btn-ghost btn-icon" title="Edit" onclick="edProv('${esc(f)}')">${iEdit()}</button>
-      <button class="btn btn-sm btn-danger btn-icon" title="Remove" onclick="rmProv('${esc(f)}')">${iTrash()}</button>
+      <button class="btn btn-sm btn-ghost btn-icon" title="Duplicate" onclick="dupProv('${esc(uuid)}')">${iCopy()}</button>
+      <button class="btn btn-sm btn-ghost btn-icon" title="Edit" onclick="edProv('${esc(uuid)}')">${iEdit()}</button>
+      <button class="btn btn-sm btn-danger btn-icon" title="Remove" onclick="rmProv('${esc(uuid)}')">${iTrash()}</button>
     </div></div>`).join('');
   return`<div class="content-title">🌐 Providers</div><div class="content-subtitle">${e.length} configured</div>
     ${cards||'<div style="color:var(--color-text-muted);padding:12px 0">No providers yet.</div>'}
     <div class="card"><div class="card-header">➕ Add Provider</div>
     <div class="form-row"><div class="form-group"><label class="form-label">Family</label><div class="dropdown-wrap" id="ddProvFamily"></div></div><div class="form-group"><label class="form-label">Provider Name</label><input class="form-input sm" id="pfName" placeholder="My OpenAI"></div><div class="form-group" style="flex:2"><label class="form-label">Base URL</label><input class="form-input sm" id="pfU" placeholder="https://api.example.com/v1"></div></div>
     <div class="form-group"><label class="form-label">Aliases (pickId=apiName, ...)</label><input class="form-input sm" id="pfA" placeholder="gpt-4o=gpt-4o-2024-08-06"></div>
-    <button class="btn btn-primary btn-sm" onclick="addProv()">${iPlus()} Add</button></div>`;
+    <button class="btn btn-primary btn-sm" onclick="addProv()" title="Add a new provider">${iPlus()} Add</button></div>`;
 }
 
 // --- Manage Models ---
 let modelFilter = '';
 function rMod(){
   const hs=new Set(st.hiddenBuiltins||[]);
-  const provKeys = Object.keys(st.providers);
+  const provKeys = Object.keys(st.providers).filter(k => st.providers[k] && !st.providers[k]._deleted);
   if (!provKeys.length) return `<div class="content-title">🧩 Manage Models</div><div class="content-subtitle">No providers configured. Add one in the Providers tab first.</div>`;
   const filter = modelFilter || provKeys[0];
+  const filterProv = st.providers[filter] || {};
+  const filterFamily = filterProv.family || '';
 
-  const blt=(st.builtinModels||[]).filter(m=>!filter||m.family===filter).map(m=>{const hid=hs.has(m.id);const ap=m.apiPath||'/chat/completions';const apCls=ap==='/responses'?'badge badge-purple':'badge badge-muted';const pname=(st.providers[m.family]||{}).name||m.family;return`<div class="model-row${hid?' disabled':''}">
-    <div class="model-info"><span class="model-name">${esc(m.name)} <span class="model-builtin-badge">built‑in</span></span><span class="badge badge-primary">${esc(m.family)}</span><span class="model-family">${esc(pname)}</span>
+  const totalModels = Object.values(st.models||{}).reduce((s,arr)=>s+(Array.isArray(arr)?arr.filter(m=>!m._deleted).length:0),0);
+
+  const blt=(st.builtinModels||[]).filter(m=>!filter||m.family===filterFamily).map(m=>{const hid=hs.has(m.id);const ap=m.apiPath||'/chat/completions';const apCls=ap==='/responses'?'badge badge-purple':'badge badge-muted';const pname=provNameForFamily(m.family);const flabel=engineFamilyLabel(m.family);return`<div class="model-row${hid?' disabled':''}">
+    <div class="model-info"><span class="model-name">${esc(m.name)} <span class="model-builtin-badge">built‑in</span></span><span class="badge badge-primary">${esc(flabel)}</span><span class="model-family">${esc(pname)}</span>
       <span class="${apCls}">${ap}</span>
       <span class="badge badge-primary">${(m.maxIn/1000)|0}K→${(m.maxOut/1000)|0}K</span>${m.image?'<span class="badge badge-info">vision</span>':''}${m.visionFallback?`<span class="badge badge-accent">🔁 ${esc(m.visionFallback)}</span>`:''}${m.thinking?'<span class="badge badge-purple">thinking</span>':''}<span class="badge badge-muted">🔧 ${m.toolCalling}</span>${m.pricing?`<span class="badge badge-success">💰 ${esc(m.pricing)}</span>`:''}</div>
     <div class="model-actions">
@@ -209,16 +226,19 @@ function rMod(){
       <button class="btn btn-sm btn-ghost btn-icon" title="${hid?'Show':'Hide'}" onclick="togBlt('${esc(m.id)}')">${hid?iEyeOff():iEye()}</button>
       <button class="btn btn-sm btn-danger btn-icon" title="Delete" onclick="delBlt('${esc(m.id)}')">${iTrash()}</button>
     </div></div>`}).join('');
-  const cust=(st.models||[]).filter(m=>!filter||m.family===filter).map(m=>{const hid=(st.hiddenCustomModels||[]).includes(m.family+':'+m.id);const ap=m.apiPath||'/chat/completions';const apCls=ap==='/responses'?'badge badge-purple':'badge badge-muted';const pname=(st.providers[m.family]||{}).name||m.family;return`<div class="model-row${hid?' disabled':''}"><div class="model-info"><span class="model-name">${esc(m.name||m.id)}</span><span class="badge badge-primary">${esc(m.family)}</span><span class="model-family">${esc(pname)}</span>
+
+  const custArr = (Array.isArray(st.models[filter]) ? st.models[filter] : []).filter(m=>!m._deleted);
+  const cust=custArr.map(m=>{const hid=(st.hiddenCustomModels||[]).includes(m.family+':'+m.id);const ap=m.apiPath||'/chat/completions';const apCls=ap==='/responses'?'badge badge-purple':'badge badge-muted';const pname=provNameForFamily(m.family);const flabel=engineFamilyLabel(m.family);return`<div class="model-row${hid?' disabled':''}"><div class="model-info"><span class="model-name">${esc(m.name||m.id)}</span><span class="badge badge-primary">${esc(flabel)}</span><span class="model-family">${esc(pname)}</span>
       <span class="${apCls}">${ap}</span>
       <span class="badge badge-primary">${(m.maxIn/1000)|0}K→${(m.maxOut/1000)|0}K</span>${m.image?'<span class="badge badge-info">vision</span>':''}${m.visionFallback?`<span class="badge badge-accent">🔁 ${esc(m.visionFallback)}</span>`:''}${m.thinking?'<span class="badge badge-purple">thinking</span>':''}${m.toolCalling?`<span class="badge badge-muted">🔧 ${m.toolCalling}</span>`:''}${m.pricing?`<span class="badge badge-success">💰 ${esc(m.pricing)}</span>`:''}</div>
     <div class="model-actions">
-      <button class="btn btn-sm btn-ghost btn-icon" title="Edit" onclick="edCust('${esc(m.id)}','${esc(m.family)}')">${iEdit()}</button>
+      <button class="btn btn-sm btn-ghost btn-icon" title="Duplicate" onclick="dupMod('${esc(filter)}','${esc(m._key||m.uuid||'')}')">${iCopy()}</button>
+      <button class="btn btn-sm btn-ghost btn-icon" title="Edit" onclick="edCust('${esc(filter)}','${esc(m._key||m.uuid||'')}')">${iEdit()}</button>
       <button class="btn btn-sm btn-ghost btn-icon" title="${hid?'Show in picker':'Hide from picker'}" onclick="togCust('${esc(m.id)}','${esc(m.family)}')">${hid?iEyeOff():iEye()}</button>
-      <button class="btn btn-sm btn-danger btn-icon" title="Delete" onclick="rmMod('${esc(m.id)}','${esc(m.family)}')">${iTrash()}</button>
+      <button class="btn btn-sm btn-danger btn-icon" title="Delete" onclick="rmMod('${esc(filter)}','${esc(m._key||m.uuid||'')}')">${iTrash()}</button>
     </div></div>`}).join('');
   return`<div class="content-title">🧩 Manage Models</div>
-    <div class="inline-row" style="justify-content:space-between;align-items:center"><div class="content-subtitle" style="margin-top:0">${(st.models||[]).length} model(s)</div>
+    <div class="inline-row" style="justify-content:space-between;align-items:center"><div class="content-subtitle" style="margin-top:0">${totalModels} model(s)</div>
       <div class="inline-row" style="gap:8px;align-items:center"><span style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em">${iGlobe()} Provider</span><div class="dropdown-wrap" id="ddModelFilter" style="min-width:140px"></div></div></div>
     ${blt}${cust}${!blt&&!cust?'<div style="color:var(--color-text-muted);padding:12px 0">No models for this provider.</div>':''}
     <div class="card"><div class="card-header">➕ Add Model</div>
@@ -227,30 +247,144 @@ function rMod(){
     <div class="form-row"><div class="form-group"><label class="form-label">Input Tokens</label><div class="dropdown-wrap" id="ddMC"></div></div><div class="form-group"><label class="form-label">Output Tokens</label><div class="dropdown-wrap" id="ddMO"></div></div><div class="form-group"><label class="form-label">API Path</label><div class="dropdown-wrap" id="ddMAP"></div></div></div>
     <div class="form-row"><div class="form-group"><label class="form-label">Tools</label><div class="dropdown-wrap" id="ddMT"></div></div><div style="display:flex;gap:24px;align-items:flex-end;padding-bottom:12px"><div class="checkbox-wrap" id="cbVis"><div class="checkbox-box"><svg class="checkbox-icon" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3"/></svg></div><span class="checkbox-label">Vision</span></div><div class="checkbox-wrap" id="cbThk"><div class="checkbox-box"><svg class="checkbox-icon" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3"/></svg></div><span class="checkbox-label">Thinking</span></div></div><div class="form-group" style="flex:0.7"><label class="form-label">Pricing /1M tokens</label><input class="form-input sm" id="mPr" placeholder="in $0.14 / out $0.28 / cache $0.0028"></div></div>
     <div class="form-row"><div class="form-group" style="flex:1"><label class="form-label">Vision Fallback <span class="badge badge-muted">per‑model</span></label><div class="dropdown-wrap" id="ddMVF"></div></div></div>
-    <button class="btn btn-primary btn-sm" onclick="addMod()">${iPlus()} Add Model</button></div>`;
+    <button class="btn btn-primary btn-sm" onclick="addMod()" title="Add a new model">${iPlus()} Add Model</button></div>`;
 }
 let dF,dC,dO,dT,cV,cT,dAP,dVF,ddKeyProv;
-function addMod(){const id=gid('mId').value.trim();if(!id)return toast('❌ Model ID required');const vf=dVF?dVF.value:'';const nm=gid('mNm').value.trim();const dsc=gid('mDsc').value.trim();const e={id,name:nm||id,family:dF.value,maxIn:+dC.value,maxOut:+dO.value,image:cV.checked,thinking:cT.checked,toolCalling:+dT.value,apiPath:dAP.value==='/chat/completions'?undefined:dAP.value,pricing:gid('mPr').value.trim()||undefined,visionFallback:vf||undefined,detail:nm||'User-defined model',tooltip:dsc||undefined,version:'custom'};vsc.postMessage({type:'saveModel',payload:e});gid('mId').value='';gid('mNm').value='';gid('mDsc').value='';gid('mPr').value='';toast('✅ Model added');resetFormMode();render();}
-function rmMod(id,f){confirmModal('Delete this model?','This cannot be undone.',()=>{vsc.postMessage({type:'removeModel',payload:{id,family:f}});toast('🗑 Deleted')})}
+function provUuidForFamily(fam){const e=Object.entries(st.providers).find(([,p])=>p&&!p._deleted&&p.family===fam);return e?e[0]:null;}
+function provNameForFamily(fam){const uid=provUuidForFamily(fam);return uid?((st.providers[uid]||{}).name||fam):fam;}
+function engineFamilyLabel(fam){const d=(st.engineFamilies||[]).find(f=>f.family===fam);return d?d.label:fam;}
+function flatModels(){const r=[];for(const arr of Object.values(st.models||{})){if(Array.isArray(arr))for(const m of arr)if(m&&!m._deleted)r.push(m)}return r;}
+function addMod(){const id=gid('mId').value.trim();if(!id)return toast('❌ Model ID required');const pUuid=dF?dF.value:'';if(!pUuid)return toast('❌ No provider selected');const vf=dVF?dVF.value:'';const nm=gid('mNm').value.trim();const dsc=gid('mDsc').value.trim();const prov=st.providers[pUuid]||{};const e={id,name:nm||id,family:prov.family||'',maxIn:+dC.value,maxOut:+dO.value,image:cV.checked,thinking:cT.checked,toolCalling:+dT.value,apiPath:dAP.value==='/chat/completions'?undefined:dAP.value,pricing:gid('mPr').value.trim()||undefined,visionFallback:vf||undefined,detail:nm||'User-defined model',tooltip:dsc||undefined,version:'custom',_key:Date.now().toString(36)+Math.random().toString(36).slice(2,6),parentUuid:pUuid};vsc.postMessage({type:'saveModel',payload:e});gid('mId').value='';gid('mNm').value='';gid('mDsc').value='';gid('mPr').value='';toast('✅ Model added');resetFormMode();render();}
+function rmMod(parentUuid,uuid){confirmModal('Delete this model?','This cannot be undone.',()=>{vsc.postMessage({type:'removeModel',payload:{parentUuid,uuid}});toast('🗑 Deleted')})}
 function togBlt(id){vsc.postMessage({type:'toggleBuiltin',payload:{id}})}
 function delBlt(id){confirmModal('Hide this built‑in model?','It will disappear from the Copilot picker.',()=>{vsc.postMessage({type:'deleteBuiltin',payload:{id}});toast('🗑 Hidden')})}
 function togCust(id,f){vsc.postMessage({type:'toggleCustom',payload:{id,family:f}})}
-function resetFormMode(){const btn=document.querySelector('#content button.btn-primary');if(btn){btn.innerHTML=iPlus()+' Add Model';btn.onclick=addMod};if(dF)dF.locked=false;}
-async function edCust(id,f){
-  const m=(st.models||[]).find(x=>x.id===id&&x.family===f);if(!m)return;
+function resetFormMode(){const btn=document.querySelector('#content button.btn-primary');if(btn){btn.innerHTML=iPlus()+' Add Model';btn.title='Add a new model';btn.onclick=addMod};if(dF)dF.locked=false;}
+function dupMod(parentUuid,uuidKey){const arr=st.models[parentUuid]||[];const m=arr.find(x=>x.uuid===uuidKey||x._key===uuidKey);if(!m)return;const nm=(m.name||m.id)+' (copy)';const e={...m,id:m.id,name:nm,uuid:Date.now().toString(36)+Math.random().toString(36).slice(2,8),_key:Date.now().toString(36)+Math.random().toString(36).slice(2,6),parentUuid};vsc.postMessage({type:'saveModel',payload:e});toast('✅ Duplicated: '+nm);render();}
+function dupProv(uuid){vsc.postMessage({type:'duplicateProvider',payload:{uuid:uuid}});toast('✅ Provider duplicated')}
+
+// --- Bin ---
+function rBin(){
+  const delProvs=Object.entries(st.providers).filter(([,p])=>p&&p._deleted);
+  // Collect deleted models, split by whether parent provider is also deleted
+  const childMods={};const orphanMods={};let delModCount=0;
+  for(const[pUuid,arr]of Object.entries(st.models||{})){
+    if(!Array.isArray(arr)) continue;
+    const del=arr.filter(m=>m._deleted);
+    if(!del.length) continue;
+    delModCount+=del.length;
+    if(st.providers[pUuid]&&st.providers[pUuid]._deleted){
+      childMods[pUuid]=del;
+    }else{
+      orphanMods[pUuid]=del;
+    }
+  }
+  if(!delProvs.length&&!delModCount)return`<div class="content-title">🗑️ Bin</div><div class="content-subtitle">Nothing deleted yet.</div>`;
+  let h=`<div class="content-title">🗑️ Bin</div><div class="content-subtitle">${delProvs.length} provider(s), ${delModCount} model(s) deleted</div>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn btn-sm btn-danger" onclick="clearBin()" title="Permanently delete all binned items">🗑️ Clear Bin</button></div>`;
+  // Deleted providers WITH their child models in one card
+  delProvs.forEach(([uuid,p],i)=>{
+    const mods=childMods[uuid]||[];
+    h+=`<div class="card"><div class="card-header">📦 ${esc(p.name||p.family||uuid)} <span class="badge badge-primary">${esc(p.family||'')}</span>${mods.length?` — ${mods.length} model(s)`:' — no models'}</div>`;
+    h+=`<div class="provider-card"><div class="provider-info"><div class="provider-name">Provider: ${esc(p.baseUrl||'')}</div></div><div class="provider-actions"><button class="btn btn-sm btn-primary" onclick="restoreProv('${esc(uuid)}')" title="Restore from Bin">↩️ Restore Provider</button><button class="btn btn-sm btn-danger btn-icon" title="Delete Forever" onclick="permDelProv('${esc(uuid)}')">${iTrash()}</button></div></div>`;
+    mods.forEach(m=>{
+      h+=`<div class="model-row"><div class="model-info"><span class="model-name">${esc(m.name||m.id)}</span><span class="badge badge-primary">${esc(m.family)}</span></div><div class="model-actions"><button class="btn btn-sm btn-danger btn-icon" title="Delete Forever" onclick="permDelMod('${esc(uuid)}','${esc(m._key||m.uuid||'')}')">${iTrash()}</button></div></div>`;
+    });
+    h+=`</div>`;
+  });
+  // Orphaned models (provider not deleted)
+  for(const[pUuid,mods]of Object.entries(orphanMods)){
+    const prov=st.providers[pUuid]||{};const provLabel=prov.name||prov.family||pUuid;
+    h+=`<div class="card" style="margin-top:16px"><div class="card-header">📦 Orphaned Models — ${esc(provLabel)} (${mods.length})</div>`;
+    mods.forEach(m=>{
+      h+=`<div class="model-row"><div class="model-info"><span class="model-name">${esc(m.name||m.id)}</span><span class="badge badge-primary">${esc(m.family)}</span></div><div class="model-actions"><button class="btn btn-sm btn-primary" onclick="restoreMod('${esc(pUuid)}','${esc(m._key||m.uuid||'')}')" title="Restore from Bin">↩️ Restore</button><button class="btn btn-sm btn-danger btn-icon" title="Delete Forever" onclick="permDelMod('${esc(pUuid)}','${esc(m._key||m.uuid||'')}')">${iTrash()}</button></div></div>`;
+    });
+    h+=`</div>`;
+  }
+  return h;
+}
+function restoreProv(uuid){vsc.postMessage({type:'restoreProvider',payload:{uuid:uuid}});toast('✅ Restoring provider...');}
+function restoreMod(parentUuid,uuidKey){vsc.postMessage({type:'restoreModel',payload:{parentUuid,uuid:uuidKey}});toast('✅ Restoring model...');}
+function permDelProv(uuid){confirmModal('Delete provider forever?','This removes the provider, all its models, and its API key. Cannot be undone.',()=>{vsc.postMessage({type:'permDeleteProvider',payload:{uuid:uuid}});toast('🗑️ Permanently deleted');})}
+function permDelMod(parentUuid,uuidKey){confirmModal('Delete model forever?','Cannot be undone.',()=>{vsc.postMessage({type:'permDeleteModel',payload:{parentUuid,uuid:uuidKey}});toast('🗑️ Permanently deleted');})}
+function clearBin(){confirmModal('Clear entire bin?','Permanently deletes ALL deleted providers and models. Cannot be undone.',()=>{vsc.postMessage({type:'clearBin'});toast('🗑️ Bin cleared');})}
+
+// --- Dev Tools ---
+function rDev(){
+  const osKeychain=/win/i.test(navigator.platform||'')?'Windows Credential Manager':/linux/i.test(navigator.platform||'')?'Linux libsecret (gnome-keyring / kwallet)':'macOS Keychain Access';
+  const pfx='copilot-adapter-kit.apiKey';
+  let h=`<div class="content-title">🛠️ Developer Tools</div>`;
+
+  // Keychain info
+  h+=`<div class="card"><div class="card-header">🔐 Keychain Storage</div>`;
+  h+=`<div class="content-subtitle" style="margin-top:0">OS: ${osKeychain}<br>Identifier prefix: <code>${pfx}.{provider-uuid}</code></div>`;
+  h+=`<table class="kv-table"><tr><th>Provider</th><th>UUID</th><th>Keychain ID</th></tr>`;
+  for(const[uuid,p]of Object.entries(st.providers)){
+    if(!p)continue;
+    const kid=`${pfx}.${uuid}`;
+    h+=`<tr><td><span class="badge badge-primary">${esc(p.family||'')}</span> ${esc(p.name||p.family||uuid)}</td><td><code>${esc(uuid)}</code></td><td><code>${esc(kid)}</code></td></tr>`;
+  }
+  h+=`</table></div>`;
+
+  // Active Models (map-of-arrays)
+  let totalActive=0;
+  for(const arr of Object.values(st.models||{})){if(Array.isArray(arr)) totalActive+=arr.filter(m=>!m._deleted).length;}
+  h+=`<div class="card"><div class="card-header">📦 Active Models (${totalActive})</div>`;
+  h+=`<table class="kv-table"><tr><th>Provider UUID</th><th>ID</th><th>Name</th><th>Family</th><th>UUID</th></tr>`;
+  for(const[pUuid,arr]of Object.entries(st.models||{})){
+    if(!Array.isArray(arr)) continue;
+    const prov=st.providers[pUuid]||{};const pName=prov.name||prov.family||pUuid;
+    arr.filter(m=>!m._deleted).forEach(m=>{
+      h+=`<tr><td><code title="${esc(pName)}">${esc(pUuid.slice(0,8))}…</code></td><td><code>${esc(m.id)}</code></td><td>${esc(m.name||m.id)}</td><td><span class="badge badge-primary">${esc(m.family)}</span></td><td><code>${esc(m.uuid||'—')}</code></td></tr>`;
+    });
+  }
+  h+=`</table></div>`;
+
+  // Bin
+  const delProvs=Object.entries(st.providers).filter(([,p])=>p&&p._deleted);
+  let delModCount=0;const delModEntries=[];
+  for(const[pUuid,arr]of Object.entries(st.models||{})){
+    if(!Array.isArray(arr)) continue;
+    arr.filter(m=>m._deleted).forEach(m=>{delModCount++;delModEntries.push({pUuid,m});});
+  }
+  if(delProvs.length||delModCount){
+    h+=`<div class="card"><div class="card-header">🗑️ Bin Contents</div>`;
+    if(delProvs.length){
+      h+=`<div class="content-subtitle">Deleted Providers</div>`;
+      h+=`<table class="kv-table"><tr><th>Family</th><th>Name</th><th>UUID</th></tr>`;
+      delProvs.forEach(([uuid,p])=>{
+        h+=`<tr><td><span class="badge badge-primary">${esc(p.family||'')}</span></td><td>${esc(p.name||p.family||uuid)}</td><td><code>${esc(uuid)}</code></td></tr>`;
+      });
+      h+=`</table>`;
+    }
+    if(delModEntries.length){
+      h+=`<div class="content-subtitle" style="margin-top:16px">Deleted Models (${delModCount})</div>`;
+      h+=`<table class="kv-table"><tr><th>Provider</th><th>ID</th><th>Name</th><th>UUID</th></tr>`;
+      delModEntries.forEach(({pUuid,m})=>{
+        const prov=st.providers[pUuid]||{};const pName=prov.name||prov.family||pUuid;
+        h+=`<tr><td><code title="${esc(pName)}">${esc(pUuid.slice(0,8))}…</code></td><td><code>${esc(m.id)}</code></td><td>${esc(m.name||m.id)}</td><td><code>${esc(m.uuid||'—')}</code></td></tr>`;
+      });
+      h+=`</table>`;
+    }
+    h+=`</div>`;
+  }
+  return h;
+}
+async function edCust(parentUuid,modelUuid){
+  const arr=st.models[parentUuid]||[];const m=arr.find(x=>x.uuid===modelUuid||x._key===modelUuid);if(!m)return;
   document.querySelectorAll('.sidebar-tab').forEach(t=>t.classList.remove('active'));
   document.querySelector('.sidebar-tab[data-tab="models"]').classList.add('active');
   active='models';render();
   setTimeout(()=>{
     gid('mId').value=m.id;gid('mNm').value=m.name||m.id;gid('mDsc').value=m.tooltip||m.detail||'';
-    if(dF){dF.value=m.family;dF.locked=true;}if(dC)dC.value=String(m.maxIn);if(dO)dO.value=String(m.maxOut);
+    if(dF){dF.value=parentUuid;dF.locked=true;}if(dC)dC.value=String(m.maxIn);if(dO)dO.value=String(m.maxOut);
     if(dT)dT.value=String(m.toolCalling);if(dAP)dAP.value=m.apiPath||'/chat/completions';
     if(cV)cV.checked=m.image;if(cT)cT.checked=m.thinking;
     if(dVF)dVF.value=m.visionFallback||'';
     gid('mPr').value=m.pricing||'';
     const btn=document.querySelector('#content button.btn-primary');
-    if(btn){btn.innerHTML=iEdit()+' Update Model';btn.onclick=function(){
-      const vf2=dVF?dVF.value:'';const nm=gid('mNm').value.trim();const dsc2=gid('mDsc').value.trim();const e={id:m.id,name:nm||m.id,family:dF.value,maxIn:+dC.value,maxOut:+dO.value,image:cV.checked,thinking:cT.checked,toolCalling:+dT.value,apiPath:dAP.value==='/chat/completions'?undefined:dAP.value,pricing:gid('mPr').value.trim()||undefined,visionFallback:vf2||undefined,detail:nm||m.detail,tooltip:dsc2||m.tooltip||undefined,version:m.version||'custom'};
+    if(btn){btn.innerHTML=iEdit()+' Update Model';btn.title='Update this model';btn.onclick=function(){
+      const vf2=dVF?dVF.value:'';const nm=gid('mNm').value.trim();const dsc2=gid('mDsc').value.trim();const newId=gid('mId').value.trim()||m.id;const prov=st.providers[dF.value]||{};const e={id:newId,name:nm||newId,family:prov.family||m.family,maxIn:+dC.value,maxOut:+dO.value,image:cV.checked,thinking:cT.checked,toolCalling:+dT.value,apiPath:dAP.value==='/chat/completions'?undefined:dAP.value,pricing:gid('mPr').value.trim()||undefined,visionFallback:vf2||undefined,detail:nm||m.detail,tooltip:dsc2||m.tooltip||undefined,version:m.version||'custom',uuid:m.uuid,_key:m._key,parentUuid:dF.value};
       vsc.postMessage({type:'saveModel',payload:e});gid('mId').value='';gid('mNm').value='';gid('mPr').value='';toast('✅ Model updated');resetFormMode();
     }}
     document.querySelector('.content').scrollTop=9999;
@@ -273,8 +407,8 @@ async function edBlt(id){
     gid('mPr').value=m.pricing||'';
     // Change button to "Update" mode
     const btn=document.querySelector('#content button.btn-primary');
-    if(btn){btn.innerHTML=iEdit()+' Update Built‑in';btn.onclick=function(){
-      const vf3=dVF?dVF.value:'';const dsc3=gid('mDsc').value.trim();const e={id:m.id,name:gid('mNm').value.trim()||m.id,family:dF.value,maxIn:+dC.value,maxOut:+dO.value,image:cV.checked,thinking:cT.checked,toolCalling:+dT.value,apiPath:dAP.value==='/chat/completions'?undefined:dAP.value,pricing:gid('mPr').value.trim()||undefined,visionFallback:vf3||undefined,detail:gid('mNm').value.trim()||m.detail,tooltip:dsc3||m.tooltip||undefined,version:m.version};
+    if(btn){btn.innerHTML=iEdit()+' Update Built‑in';btn.title='Update this built-in model';btn.onclick=function(){
+      const vf3=dVF?dVF.value:'';const dsc3=gid('mDsc').value.trim();const newId2=gid('mId').value.trim()||m.id;const e={id:newId2,name:gid('mNm').value.trim()||newId2,family:dF.value,maxIn:+dC.value,maxOut:+dO.value,image:cV.checked,thinking:cT.checked,toolCalling:+dT.value,apiPath:dAP.value==='/chat/completions'?undefined:dAP.value,pricing:gid('mPr').value.trim()||undefined,visionFallback:vf3||undefined,detail:gid('mNm').value.trim()||m.detail,tooltip:dsc3||m.tooltip||undefined,version:m.version,_key:m._key};
       vsc.postMessage({type:'editBuiltin',payload:e});gid('mId').value='';gid('mNm').value='';toast('✅ Built‑in updated');resetFormMode();
     }}
     document.querySelector('.content').scrollTop=9999;
@@ -283,17 +417,17 @@ async function edBlt(id){
 
 // --- Keys ---
 function rKeys(){
-  const entries = Object.entries(st.providers);
+  const entries = Object.entries(st.providers).filter(([,p])=>p&&!p._deleted);
   const hasProviders = entries.length > 0;
-  const rows = entries.map(([f,cfg])=>{
-    const hk=st.keys[f];
+  const rows = entries.map(([uuid,cfg])=>{
+    const hk=st.keys[uuid];
     return`<div class="provider-card">
-      <div class="provider-info"><div class="provider-name"><span class="badge badge-primary" style="margin-right:6px">${esc(f)}</span>${esc(cfg.name||f)}${hk?' <span class="badge badge-success">🔑 key set</span>':' <span class="badge badge-warning">no key</span>'}</div><div class="provider-url">${esc(cfg.baseUrl||'')}</div></div>
-      ${hk?`<span class="badge badge-success">✅ Saved to ${/win/i.test(navigator.platform||'')?'Credential Manager':'Keychain'}</span><button class="btn btn-sm btn-danger btn-icon" title="Remove" onclick="clrKey('${esc(f)}')">${iTrash()}</button>`
+      <div class="provider-info"><div class="provider-name"><span class="badge badge-primary" style="margin-right:6px">${esc(cfg.family||'')}</span>${esc(cfg.name||cfg.family||uuid)}${hk?' <span class="badge badge-success">🔑 key set</span>':' <span class="badge badge-warning">no key</span>'}</div><div class="provider-url">${esc(cfg.baseUrl||'')}</div></div>
+      ${hk?`<span class="badge badge-success">✅ Saved to ${/win/i.test(navigator.platform||'')?'Credential Manager':'Keychain'}</span><button class="btn btn-sm btn-danger btn-icon" title="Remove" onclick="clrKey('${esc(uuid)}')">${iTrash()}</button>`
         :`<span class="badge badge-warning">⚠ No key</span>`}
     </div>`}).join('');
 
-  const provOpts = entries.map(([f])=>({v:f,l:(st.providers[f]||{}).name||f}));
+  const provOpts = entries.map(([uuid])=>({v:uuid,l:(st.providers[uuid]||{}).name||(st.providers[uuid]||{}).family||uuid}));
   if (!provOpts.length) return `<div class="content-title">🔑 API Keys</div><div class="content-subtitle">No providers configured.</div>`;
 
   return`<div class="content-title">🔑 API Keys</div>
@@ -303,7 +437,7 @@ function rKeys(){
       <div class="inline-row" style="gap:8px">
         <div class="dropdown-wrap" id="ddKeyProv" style="min-width:140px"></div>
         <input class="form-input sm" id="keyInput" placeholder="Paste your API key..." style="flex:1" type="password">
-        <button class="btn btn-primary btn-sm" onclick="addKey()" style="white-space:nowrap">💾 Save to Keychain</button>
+        <button class="btn btn-primary btn-sm" onclick="addKey()" style="white-space:nowrap" title="Save API key to OS keychain">💾 Save to Keychain</button>
       </div>
       <div style="margin-top:8px;color:var(--color-text-muted);font-size:11px">🔐 macOS: Keychain Access &nbsp;|&nbsp; 🪟 Windows: Credential Manager &nbsp;|&nbsp; 🐧 Linux: libsecret</div>
     </div>`:''}`;
@@ -311,21 +445,21 @@ function rKeys(){
 
 function addKey(){
     if (!ddKeyProv) return toast('❌ No providers configured');
-    const f = ddKeyProv.value;
+    const uuid = ddKeyProv.value;
   const k = gid('keyInput').value.trim();
   if(!k) return toast('❌ Key cannot be empty');
-  vsc.postMessage({type:'setApiKey',payload:{family:f,key:k}});
+  vsc.postMessage({type:'setApiKey',payload:{uuid:uuid,key:k}});
   gid('keyInput').value = '';
-  toast('✅ Key saved for ' + ((st.providers[f]||{}).name||f));
+  toast('✅ Key saved for ' + ((st.providers[uuid]||{}).name||(st.providers[uuid]||{}).family||uuid));
 }
-function clrKey(f){vsc.postMessage({type:'clearApiKey',payload:{family:f}})}
+function clrKey(uuid){vsc.postMessage({type:'clearApiKey',payload:{uuid:uuid}})}
 
 // --- Config ---
 function rCfg(){
   const sp = st.systemPrompt || DEFAULT_SYSTEM_PROMPT;
   const up = st.userPromptTemplate || '';
   return`<div class="content-title">⚙️ Configuration</div><div class="content-subtitle">Global settings for all providers</div>
-  <div class="card"><div class="card-header">Max Output Tokens</div><div class="inline-row"><input class="form-input sm" id="cfgMaxT" value="${st.maxTokens||''}" placeholder="0 = unlimited" style="width:160px"><button class="btn btn-sm btn-primary" onclick="svCfg('maxTokens',+gid('cfgMaxT').value||0)">💾 Save</button></div></div>
+  <div class="card"><div class="card-header">Max Output Tokens</div><div class="inline-row"><input class="form-input sm" id="cfgMaxT" value="${st.maxTokens||''}" placeholder="0 = unlimited" style="width:160px"><button class="btn btn-sm btn-primary" title="Save max tokens" onclick="svCfg('maxTokens',+gid('cfgMaxT').value||0)">💾 Save</button></div></div>
   <div class="card"><div class="card-header">Log Level</div><div class="dropdown-wrap" id="ddLog"></div></div>
   <div class="card"><div class="card-header">Tool Stabilization <span class="badge badge-warning">experimental</span></div><div class="checkbox-wrap" id="cbStab"><div class="checkbox-box"><svg class="checkbox-icon" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3"/></svg></div><span class="checkbox-label">Pre‑activate tools for cache stability</span></div></div>
   <div class="card">
@@ -337,13 +471,13 @@ function rCfg(){
     <div style="font-size:10px;color:var(--color-text-muted);margin-bottom:4px">Placeholders: <code>{model}</code> <code>{date}</code> <code>{tools}</code> <code>{cakVersion}</code></div>
     <textarea class="form-input" id="sysPrompt" rows="6" style="font-family:monospace;font-size:11px;resize:vertical;min-height:100px">${esc(sp)}</textarea>
     <div style="margin-top:6px;display:flex;gap:6px">
-      <button class="btn btn-sm btn-primary" onclick="svCfg('systemPrompt',gid('sysPrompt').value)">💾 Save</button>
-      <button class="btn btn-sm btn-ghost" onclick="gid('sysPrompt').value=DEFAULT_SYSTEM_PROMPT;toast('↩️ Reset')">↩️ Default</button>
+      <button class="btn btn-sm btn-primary" onclick="svCfg('systemPrompt',gid('sysPrompt').value)" title="Save system prompt">💾 Save</button>
+      <button class="btn btn-sm btn-ghost" onclick="gid('sysPrompt').value=DEFAULT_SYSTEM_PROMPT;toast('↩️ Reset')" title="Reset to default prompt">↩️ Default</button>
     </div></div>
     <div class="form-group"><label class="form-label">User Prompt Wrapper <span class="badge badge-purple">template</span></label>
     <div style="font-size:10px;color:var(--color-text-muted);margin-bottom:4px">Use <code>{userMessage}</code> placeholder. Leave empty for no wrapping.</div>
     <textarea class="form-input" id="usrPrompt" rows="3" style="font-family:monospace;font-size:11px;resize:vertical;min-height:60px" placeholder="[CONTEXT]\\n\\n{userMessage}\\n\\n[/CONTEXT]">${esc(up)}</textarea>
-    <div style="margin-top:6px"><button class="btn btn-sm btn-primary" onclick="svCfg('userPromptTemplate',gid('usrPrompt').value)">💾 Save</button></div></div>
+    <div style="margin-top:6px"><button class="btn btn-sm btn-primary" onclick="svCfg('userPromptTemplate',gid('usrPrompt').value)" title="Save user prompt template">💾 Save</button></div></div>
   </div>
   <div class="card">
     <div class="card-header">📝 Git Commit Prompt</div>
@@ -375,13 +509,13 @@ function rJson(){return`<div class="content-title">{ } JSON Settings</div><div c
 function rDmp(){return`<div class="content-title">📂 Request Dumps</div><div class="content-subtitle">Payloads saved when log level = dump</div><div><button class="btn btn-ghost" onclick="vsc.postMessage({type:'openDumps'})">${iFolder()} Open Dumps Folder</button></div><div style="margin-top:12px;color:var(--color-text-muted);font-size:12px">Dumps include <code>.json</code> (payload), <code>.sys.txt</code> (system prompt), <code>.tools.json</code>, <code>.error.json</code>, and <code>.vision-fallback.json</code> when vision fallback is active.</div>`}
 function rDanger(){return`<div class="content-title" style="color:var(--color-error)">⚠️ Danger Zone</div><div class="content-subtitle">These actions cannot be undone. Proceed with caution.</div>
   <div class="card" style="border-color:rgba(239,68,68,.3)">
-    <div class="card-header" style="color:var(--color-error)">🗑 Delete All</div>
-    <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">Removes every provider, every model, every API key, and all configuration. The extension will be as if freshly installed — except settings.json keys are cleared rather than deleted.</div>
-    <button class="btn btn-danger" onclick="confirmModal('⚠️ Delete EVERYTHING?','All providers, models, keys, and settings will be permanently removed. This CANNOT be undone.',()=>{vsc.postMessage({type:'deleteAll'});toast('🗑 Everything deleted')})">${iTrash('#fff')} Delete All</button>
+    <div class="card-header" style="color:var(--color-error)">🧹 Remove All Legacy Data</div>
+    <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">Clears ALL settings.json keys for this extension — providers, models, keys, config. Start fresh with the new data format. This is the nuclear option.</div>
+    <button class="btn btn-danger" onclick="confirmModal('⚠️ Remove ALL legacy data?','Every setting will be wiped. Providers, models, API keys — everything gone. Extension returns to factory state. CANNOT be undone.',()=>{vsc.postMessage({type:'deleteAll'});toast('🧹 All legacy data removed')})">${iTrash('#fff')} Remove All Legacy</button>
   </div>
   <div class="card" style="border-color:rgba(239,68,68,.3);margin-top:16px">
     <div class="card-header" style="color:var(--color-warning)">🏭 Factory Default</div>
-    <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">Resets all settings to their default values. Providers, models, keys — all cleared. Same state as installing the extension for the first time.</div>
+    <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">Same as above — resets every setting to default. Providers, models, keys — all cleared.</div>
     <button class="btn btn-danger" onclick="confirmModal('⚠️ Factory Reset?','All data will be wiped. The extension will be as if freshly installed. This CANNOT be undone.',()=>{vsc.postMessage({type:'factoryReset'});toast('🏭 Factory reset complete')})">🏭 Factory Reset</button>
   </div>`}
 
@@ -485,10 +619,12 @@ function ddMake(id, opts, sel, onCh) {
   if (!wrap) return;
   let val = String(sel);
   let open = false;
+  let _locked = false;
 
   function refresh() {
     const cur = opts.find(o => String(o.v||o.value) === val) || { l: val, label: val };
-    let h = `<div class="dropdown-trigger sm${open?' open':''}" onclick="event.stopPropagation();window._ddReg['${id}'].toggle()"><span>${cur.l||cur.label}</span><span class="dropdown-arrow">▼</span></div>`;
+    const lockedCls = _locked ? ' locked' : '';
+    let h = `<div class="dropdown-trigger sm${open?' open':''}${lockedCls}" onclick="event.stopPropagation();window._ddReg['${id}'].toggle()"><span>${cur.l||cur.label}</span><span class="dropdown-arrow">▼</span></div>`;
     if (open) {
       h += `<div class="dropdown-menu" id="${id}-menu">${opts.map(o => `<div class="dropdown-item${String(o.v||o.value)===val?' selected':''}" onclick="event.stopPropagation();window._ddReg['${id}'].pick('${o.v||o.value}')">${o.l||o.label}</div>`).join('')}</div>`;
     }
@@ -507,9 +643,12 @@ function ddMake(id, opts, sel, onCh) {
   const inst = {
     get value() { return val; },
     set value(v) { val = v; refresh(); if (onCh) onCh(v); },
+    get locked() { return _locked; },
+    set locked(v) { _locked = v; refresh(); },
     options: opts, refresh,
     close() { open = false; refresh(); },
     toggle() {
+      if (_locked) return;
       const prev = window._openDD;
       if (prev && prev !== wrap && prev._inst) { prev._inst.close(); }
       open = !open; refresh();
@@ -532,10 +671,12 @@ function ddMakeGrouped(id, opts, sel, onCh) {
   if (!wrap) return;
   let val = String(sel);
   let open = false;
+  let _locked = false;
 
   function refresh() {
     const cur = opts.find(o => String(o.v||o.value) === val) || { l: val, label: val };
-    let h = `<div class="dropdown-trigger sm${open?' open':''}" onclick="event.stopPropagation();window._ddReg['${id}'].toggle()"><span>${cur.l||cur.label}</span><span class="dropdown-arrow">▼</span></div>`;
+    const lockedCls = _locked ? ' locked' : '';
+    let h = `<div class="dropdown-trigger sm${open?' open':''}${lockedCls}" onclick="event.stopPropagation();window._ddReg['${id}'].toggle()"><span>${cur.l||cur.label}</span><span class="dropdown-arrow">▼</span></div>`;
     if (open) {
       let lastGroup = null;
       h += `<div class="dropdown-menu${opts.length>8?' flip-up':''}" id="${id}-menu">`;
@@ -554,9 +695,12 @@ function ddMakeGrouped(id, opts, sel, onCh) {
   const inst = {
     get value() { return val; },
     set value(v) { val = v; refresh(); if (onCh) onCh(v); },
+    get locked() { return _locked; },
+    set locked(v) { _locked = v; refresh(); },
     options: opts, refresh,
     close() { open = false; refresh(); },
     toggle() {
+      if (_locked) return;
       const prev = window._openDD;
       if (prev && prev !== wrap && prev._inst) { prev._inst.close(); }
       open = !open; refresh();
@@ -599,13 +743,18 @@ function rebindDD() {
     });
   }
   if (active === 'models') {
-    const fams = Object.keys(st.providers); if (!fams.length) fams.push('openai');
-    const famLabels = fams.map(f => {
-      const famDef = (st.engineFamilies||[]).find((x)=>x.family===f);
-      const pname = (st.providers[f]||{}).name;
-      return { v: f, l: pname || famDef?.label || f };
+    const fams = Object.keys(st.providers).filter(k => st.providers[k] && !st.providers[k]._deleted); if (!fams.length) fams.push('openai');
+    // Provider filter dropdown: show custom name
+    const provLabels = fams.map(uuid => {
+      const p = st.providers[uuid]||{};
+      return { v: uuid, l: p.name || p.family || uuid };
     });
-    ddMake('ddModelFilter', famLabels, modelFilter || fams[0], function(v){modelFilter=v;render();});
+    ddMake('ddModelFilter', provLabels, modelFilter || fams[0], function(v){modelFilter=v;render();});
+    // Family dropdown in Add Model form: show engine family label
+    const famLabels = fams.map(uuid => {
+      const p = st.providers[uuid]||{};
+      return { v: uuid, l: engineFamilyLabel(p.family) || p.name || uuid };
+    });
     dF = ddMake('ddMF', famLabels, fams[0]);
     // Lock Family dropdown when a Provider is selected in the filter
     const lockFamDropdown = function() {
@@ -627,7 +776,7 @@ function rebindDD() {
     const cakLmItems2 = allLm2.filter(m=>m.vendor==='copilot-adapter-kit')
       .map(m=>({v:m.family+':'+m.id,l:m.name+' ('+m.family+')',g:'Copilot Adapter Kit'}));
     const cakLmIds2 = new Set(cakLmItems2.map(x=>x.v));
-    const extraCak2 = (st.models||[]).filter(m=>m.image).filter(m=>!cakLmIds2.has(m.family+':'+m.id))
+    const extraCak2 = flatModels().filter(m=>m.image).filter(m=>!cakLmIds2.has(m.family+':'+m.id))
       .map(m=>({v:m.family+':'+m.id,l:(m.name||m.id)+' ('+m.family+')',g:'Copilot Adapter Kit'}));
     const vfModelItems = [...copilotItems2, ...cakLmItems2, ...extraCak2];
     vfModelItems.unshift({v:'',l:'🔇 None (inherit global)',g:''});
@@ -651,7 +800,7 @@ function rebindDD() {
       .map(m=>({v:m.family+':'+m.id,l:m.name+' ('+m.family+')',g:'Copilot Adapter Kit'}));
     // Also include models from st.models that aren't already in cakLmItems
     const cakLmIds = new Set(cakLmItems.map(x=>x.v));
-    const extraCak = (st.models||[]).filter(m=>m.image).filter(m=>!cakLmIds.has(m.family+':'+m.id))
+    const extraCak = flatModels().filter(m=>m.image).filter(m=>!cakLmIds.has(m.family+':'+m.id))
       .map(m=>({v:m.family+':'+m.id,l:(m.name||m.id)+' ('+m.family+')',g:'Copilot Adapter Kit'}));
     const visionItems = [...copilotItems, ...cakLmItems, ...extraCak];
     visionItems.unshift({v:'',l:'🔇 None (disable)',g:''});
@@ -665,10 +814,10 @@ function rebindDD() {
     });
   }
   if (active === 'keys') {
-    const fams = Object.keys(st.providers); if (!fams.length) return;
-    const keyFamLabels = fams.map(f => {
-      const famDef = (st.engineFamilies||[]).find((x)=>x.family===f);
-      return { v: f, l: famDef?.label || (st.providers[f]||{}).name || f };
+    const fams = Object.keys(st.providers).filter(k => st.providers[k] && !st.providers[k]._deleted); if (!fams.length) return;
+    const keyFamLabels = fams.map(uuid => {
+      const p = st.providers[uuid]||{};
+      return { v: uuid, l: p.name || p.family || uuid };
     });
     ddKeyProv = ddMake('ddKeyProv', keyFamLabels, fams[0]);
   }
@@ -691,10 +840,11 @@ function rebindDD() {
 function bindCb(id,init){const el=document.getElementById(id);if(!el)return{checked:false,el};let c=!!init;const lbl=el.querySelector('.checkbox-label')?.outerHTML||'';function rf(){el.innerHTML=`<div class="checkbox-box${c?' checked':''}"><svg class="checkbox-icon" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3"/></svg></div>${lbl}`}el.addEventListener('click',e=>{if(e.target.closest('.checkbox-box')){c=!c;rf()}});el._cb={get checked(){return c},set checked(v){c=v;rf()},el,refresh:rf};rf();return el._cb}
 
 // --- Provider actions ---
-function addProv(){const f=ddProvFamily?ddProvFamily.value:'';const nm=gid('pfName').value.trim();const u=gid('pfU').value.trim(),a=gid('pfA').value.trim();if(!f||!u)return toast('❌ Family & URL required');const ma={};if(a)a.split(',').forEach(p=>{const[k,...v]=p.trim().split('=');if(k&&v.length)ma[k.trim()]=v.join('=').trim()});vsc.postMessage({type:'saveProvider',payload:{family:f,config:{name:nm||f,baseUrl:u,modelAlias:ma}}});gid('pfName').value='';gid('pfU').value='';gid('pfA').value='';toast('✅ Provider added');resetProvBtn()}
-function edProv(f){const c=st.providers[f]||{};if(ddProvFamily)ddProvFamily.value=f;gid('pfName').value=c.name||'';gid('pfU').value=c.baseUrl||'';gid('pfA').value=c.modelAlias?Object.entries(c.modelAlias).map(([k,v])=>`${k}=${v}`).join(', '):'';const btn=document.querySelector('#content button.btn-primary');if(btn){btn.innerHTML=iEdit()+' Update Provider';btn.onclick=function(){const fam=ddProvFamily?ddProvFamily.value:'';const nm=gid('pfName').value.trim();const url=gid('pfU').value.trim(),ali=gid('pfA').value.trim();if(!fam||!url)return toast('❌ Family & URL required');const ma={};if(ali)ali.split(',').forEach(p=>{const[k,...v]=p.trim().split('=');if(k&&v.length)ma[k.trim()]=v.join('=').trim()});vsc.postMessage({type:'saveProvider',payload:{family:fam,config:{name:nm||fam,baseUrl:url,modelAlias:ma}}});gid('pfName').value='';gid('pfU').value='';gid('pfA').value='';toast('✅ Provider updated');resetProvBtn()}}document.querySelector('.content').scrollTop=9999}
-function resetProvBtn(){const btn=document.querySelector('#content button.btn-primary');if(btn){btn.innerHTML=iPlus()+' Add';btn.onclick=addProv};gid('pfName').value='';gid('pfU').value='';gid('pfA').value=''}
-function rmProv(f){const nm=(st.providers[f]||{}).name||f;const mc=(st.models||[]).filter(m=>m.family===f).length;const hk=st.keys[f];const w=[];if(mc)w.push(mc+' model(s)');if(hk)w.push('API key');const body=w.length?'⚠️ Also deletes: '+w.join(' and ')+'. Cannot be undone.':'Cannot be undone.';confirmModal('Delete '+nm+'?',body,()=>{vsc.postMessage({type:'removeProvider',payload:{family:f}});toast('🗑 Deleted')})}
+function addProv(){const fam=ddProvFamily?ddProvFamily.value:'';const nm=gid('pfName').value.trim();const u=gid('pfU').value.trim(),a=gid('pfA').value.trim();if(!fam||!u)return toast('❌ Family & URL required');const ma={};if(a)a.split(',').forEach(p=>{const[k,...v]=p.trim().split('=');if(k&&v.length)ma[k.trim()]=v.join('=').trim()});const uid=Date.now().toString(36)+Math.random().toString(36).slice(2,8);vsc.postMessage({type:'saveProvider',payload:{uuid:uid,config:{name:nm||fam,baseUrl:u,modelAlias:ma,family:fam}}});gid('pfName').value='';gid('pfU').value='';gid('pfA').value='';toast('✅ Provider added');resetProvBtn()}
+function edProv(uuid){const c=st.providers[uuid]||{};window._editProvUuid=uuid;const fam=c.family||'';if(ddProvFamily){ddProvFamily.value=fam;ddProvFamily.locked=true;}gid('pfName').value=c.name||'';gid('pfU').value=c.baseUrl||'';gid('pfA').value=c.modelAlias?Object.entries(c.modelAlias).map(([k,v])=>`${k}=${v}`).join(', '):'';const btn=document.querySelector('#content button.btn-primary');if(btn){btn.innerHTML=iEdit()+' Update Provider';btn.title='Update this provider';btn.onclick=function(){const uid=window._editProvUuid||uuid;const fam2=ddProvFamily?ddProvFamily.value:'';const nm=gid('pfName').value.trim();const url=gid('pfU').value.trim(),ali=gid('pfA').value.trim();if(!fam2||!url)return toast('❌ Family & URL required');const ma={};if(ali)ali.split(',').forEach(p=>{const[k,...v]=p.trim().split('=');if(k&&v.length)ma[k.trim()]=v.join('=').trim()});vsc.postMessage({type:'saveProvider',payload:{uuid:uid,config:{name:nm||fam2,baseUrl:url,modelAlias:ma,family:fam2}}});gid('pfName').value='';gid('pfU').value='';gid('pfA').value='';toast('✅ Provider updated');resetProvBtn()}}document.querySelector('.content').scrollTop=9999}
+function resetProvBtn(){const btn=document.querySelector('#content button.btn-primary');if(btn){btn.innerHTML=iPlus()+' Add';btn.title='Add a new provider';btn.onclick=addProv};gid('pfName').value='';gid('pfU').value='';gid('pfA').value='';window._editProvUuid=null;if(ddProvFamily)ddProvFamily.locked=false;}
+function dupProv(uuid){vsc.postMessage({type:'duplicateProvider',payload:{uuid:uuid}});toast('✅ Provider duplicated')}
+function rmProv(uuid){const c=st.providers[uuid]||{};const nm=c.name||c.family||uuid;const bucket=st.models[uuid]||[];const mc=Array.isArray(bucket)?bucket.filter(m=>!m._deleted).length:0;const hk=st.keys[uuid];const w=[];if(mc)w.push(mc+' model(s)');if(hk)w.push('API key');const body=w.length?'⚠️ Also deletes: '+w.join(' and ')+'. Cannot be undone.':'Cannot be undone.';confirmModal('Delete '+nm+'?',body,()=>{vsc.postMessage({type:'removeProvider',payload:{uuid:uuid}});toast('🗑 Deleted')})}
 
 // --- Helpers ---
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.remove('hidden');setTimeout(()=>t.classList.add('hidden'),2200)}
@@ -705,11 +855,12 @@ function confirmModal(title,body,onOk){
   document.getElementById('modalOk').onclick=()=>{ov.remove();onOk();};
   ov.addEventListener('click',e=>{if(e.target===ov)ov.remove()});
 }
-function updBadges(){document.getElementById('provCount').textContent=Object.keys(st.providers).length;document.getElementById('modelCount').textContent=(st.models||[]).length}
+function updBadges(){const provs=Object.values(st.providers).filter(p=>p&&!p._deleted).length;let mods=0,delMods=0;for(const arr of Object.values(st.models||{})){if(Array.isArray(arr)){mods+=arr.filter(m=>!m._deleted).length;delMods+=arr.filter(m=>m._deleted).length;}}const delProvs=Object.values(st.providers).filter(p=>p&&p._deleted).length;document.getElementById('provCount').textContent=provs;document.getElementById('modelCount').textContent=mods;const bc=document.getElementById('binCount');if(bc)bc.textContent=delProvs+delMods}
 function gid(id){return document.getElementById(id)}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')}
 
 window.addEventListener('message',e=>{if(e.data.type==='state'){st=e.data.payload;render()}else if(e.data.type==='gitState'){st.gitStaged=e.data.payload.staged;st.gitUnstaged=e.data.payload.unstaged;st.gitStatusShort=e.data.payload.statusShort;st.gitBranch=e.data.payload.branch;st.gitRepo=e.data.payload.repo;render()}else if(e.data.type==='gitError'){toast('❌ '+e.data.payload)}else if(e.data.type==='genCommitMsgResult'){renderGenResult(e.data.payload)}});
+window.addEventListener('message',e=>{if(e.data.type==='state'){st=e.data.payload;const provs=Object.keys(st.providers||{}).filter(k=>st.providers[k]&&!st.providers[k]._deleted);if(modelFilter&&!provs.includes(modelFilter))modelFilter=provs[0]||'';render()}});
 vsc.postMessage({type:'getState'});
 document.getElementById('icoProv').innerHTML = iGlobe();
 </script>

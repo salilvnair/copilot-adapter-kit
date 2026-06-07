@@ -32,22 +32,26 @@ export class CopilotBridge implements vscode.LanguageModelChatProvider {
     token: vscode.CancellationToken,
   ): Promise<void> {
     const meta = resolveCatalog().find(m => m.id === info.id);
-    const family = meta?.family ?? 'openai';
+    const engineFamily = meta?.family ?? info.family ?? 'openai';
 
-    // Resolve per‑family credentials
-    const provider = this.ctx.tuning.provider(family);
+    // Resolve provider by engine family (scans providers for matching `family` field)
+    const provider = this.ctx.tuning.provider(engineFamily);
     if (!provider.baseUrl) {
-      throw new Error(`No baseUrl configured for provider "${family}". Add it under copilot-adapter-kit.providers.${family}.baseUrl in Settings.`);
+      throw new Error(`No baseUrl configured for provider family "${engineFamily}". Add one in the Providers tab.`);
     }
-    const key = await this.ctx.vault.fetch(family);
+    const provUuid = this.ctx.tuning.providerUuidByFamily(engineFamily);
+    if (!provUuid) {
+      throw new Error(`No provider found for family "${engineFamily}".`);
+    }
+    const key = await this.ctx.vault.fetch(provUuid);
     if (!key) {
-      throw new Error(`No API key for "${family}". Run Copilot Adapter Kit: Set API Key.`);
+      throw new Error(`No API key for "${engineFamily}". Run Copilot Adapter Kit: Set API Key.`);
     }
 
-    const engine = this.ctx.discovery.lookup(family);
+    const engine = this.ctx.discovery.lookup(provider.family || engineFamily);
     engine.configure?.(provider.baseUrl, key);
 
-    const modelId = this.ctx.tuning.resolveModelId(info.id, family);
+    const modelId = this.ctx.tuning.resolveModelId(info.id, engineFamily);
 
     // Tool stabilization: pre-activate tools so the tools array stays identical
     const toolFlow = stabilizeToolFlow(
@@ -86,7 +90,7 @@ export class CopilotBridge implements vscode.LanguageModelChatProvider {
       tools: forgeTools(opts.tools),
       tool_choice: opts.tools?.length ? 'auto' : undefined,
       max_tokens: this.ctx.tuning.maxTokens,
-      apiPath: meta?.apiPath || this.ctx.tuning.resolveApiPath(info.id, family),
+      apiPath: meta?.apiPath || this.ctx.tuning.resolveApiPath(info.id, engineFamily),
       // Audit trail: vision fallback metadata for dump logs
       ...(visionFallbackUsed ? { _visionFallback: visionFallbackUsed } : {}),
     };
@@ -222,8 +226,9 @@ export class CopilotBridge implements vscode.LanguageModelChatProvider {
   ): Promise<string> {
     const p = this.ctx.tuning.provider(family);
     if (!p.baseUrl) throw new Error(`No baseUrl for "${family}"`);
-    const key = await this.ctx.vault.fetch(family);
-    const engine = this.ctx.discovery.lookup(family);
+    const puuid = this.ctx.tuning.providerUuidByFamily(family);
+    const key = puuid ? await this.ctx.vault.fetch(puuid) : undefined;
+    const engine = this.ctx.discovery.lookup(p.family || family);
     engine.configure?.(p.baseUrl, key || '');
 
     const visionMsg: vscode.LanguageModelChatRequestMessage = {

@@ -5,30 +5,26 @@ const PREFIX = 'copilot-adapter-kit.apiKey';
 export class Vault {
   constructor(private store: vscode.SecretStorage) {}
 
-  private _key(family: string): string { return `${PREFIX}.${family}`; }
-
-  /** Fetch key for a specific family. No fallback — every provider must have its own key. */
-  async fetch(family: string): Promise<string | undefined> {
-    return (await this.store.get(this._key(family))) || undefined;
+  /** Fetch key for a provider UUID. */
+  async fetch(uuid: string): Promise<string | undefined> {
+    return (await this.store.get(`${PREFIX}.${uuid}`)) || undefined;
   }
 
-  /** Store key for a specific family. */
-  async seal(family: string, apiKey: string): Promise<void> {
-    await this.store.store(this._key(family), apiKey.trim());
+  /** Store key for a provider UUID. */
+  async seal(uuid: string, apiKey: string): Promise<void> {
+    await this.store.store(`${PREFIX}.${uuid}`, apiKey.trim());
   }
 
-  /** Remove key for a specific family. */
-  async revoke(family: string): Promise<void> {
-    await this.store.delete(this._key(family));
+  /** Remove key for a provider UUID. */
+  async revoke(uuid: string): Promise<void> {
+    await this.store.delete(`${PREFIX}.${uuid}`);
   }
 
   /** Check if at least one configured provider has a key. */
   async present(): Promise<boolean> {
-    // Check all keys — user may not use 'openai' at all
-    const keys = await Promise.all(
-      Object.keys(vscode.workspace.getConfiguration('copilot-adapter-kit').get<Record<string, unknown>>('providers') || {})
-        .map(f => this.fetch(f))
-    );
+    const providers = vscode.workspace.getConfiguration('copilot-adapter-kit').get<Record<string, any>>('providers') || {};
+    const uuids = Object.keys(providers).filter(k => providers[k] && !providers[k]._deleted);
+    const keys = await Promise.all(uuids.map(u => this.store.get(`${PREFIX}.${u}`)));
     return keys.some(k => k !== undefined && k.length > 0);
   }
 }

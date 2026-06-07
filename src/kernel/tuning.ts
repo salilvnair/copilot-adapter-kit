@@ -1,6 +1,8 @@
 import vscode from 'vscode';
 
 export interface ProviderConfig {
+  uuid?: string;
+  family?: string;   // engine family: openai, deepseek, anthropic, …
   name?: string;
   baseUrl: string;
   defaultApiPath?: string;
@@ -11,18 +13,45 @@ export interface ProviderConfig {
 
 export type LogLevel = 'quiet' | 'meta' | 'dump';
 
-/** Per‑family provider config. Single source of truth for all settings. */
+/** Per‑provider config. Providers are keyed by UUID.  The `family` field maps to an engine. */
 export class Tuning {
   private cfg = () => vscode.workspace.getConfiguration('copilot-adapter-kit');
 
-  /** All registered provider configs keyed by family name. */
+  /** All non-deleted provider configs keyed by UUID (or legacy family key). */
   get providers(): Record<string, ProviderConfig> {
-    return this.cfg().get<Record<string, ProviderConfig>>('providers') || {};
+    const all = this.cfg().get<Record<string, any>>('providers') || {};
+    const active: Record<string, any> = {};
+    for (const [k, v] of Object.entries(all)) {
+      if (v && !v._deleted) active[k] = v;
+    }
+    return active as Record<string, ProviderConfig>;
   }
 
-  /** Look up a single provider's config. Falls back to empty config. */
-  provider(family: string): ProviderConfig {
-    return this.providers[family] || { baseUrl: '' };
+  /** Direct lookup by provider UUID. */
+  providerByUuid(uuid: string): ProviderConfig | undefined {
+    return this.providers[uuid];
+  }
+
+  /** Resolve a provider by either its UUID or its engine family.
+   *  Falls back to a direct key match for legacy family-keyed entries. */
+  provider(uuidOrFamily: string): ProviderConfig {
+    // 1) direct UUID hit
+    if (this.providers[uuidOrFamily]) return this.providers[uuidOrFamily];
+    // 2) scan for first provider whose family field matches
+    const all = this.providers;
+    for (const [, p] of Object.entries(all)) {
+      if (p.family === uuidOrFamily) return p;
+    }
+    return { baseUrl: '' };
+  }
+
+  /** Returns the provider UUID for a given engine family (first match). */
+  providerUuidByFamily(family: string): string | undefined {
+    const all = this.providers;
+    for (const [k, p] of Object.entries(all)) {
+      if (p.family === family) return k;
+    }
+    return undefined;
   }
 
   get maxTokens(): number | undefined {
@@ -43,20 +72,21 @@ export class Tuning {
   }
 
   /** Resolves the actual model ID to send to the provider API. */
-  resolveModelId(pickerId: string, family: string): string {
-    const alias = this.provider(family).modelAlias?.[pickerId];
+  resolveModelId(pickerId: string, familyOrUuid: string): string {
+    const p = this.provider(familyOrUuid);
+    const alias = p.modelAlias?.[pickerId];
     return (alias || pickerId).trim();
   }
 
-  /** Resolves the API path for a specific model. Falls back: model override → provider default → /chat/completions. */
-  resolveApiPath(pickerId: string, family: string): string {
-    const p = this.provider(family);
+  /** Resolves the API path for a specific model. */
+  resolveApiPath(pickerId: string, familyOrUuid: string): string {
+    const p = this.provider(familyOrUuid);
     return (p.modelApiPaths?.[pickerId] || p.defaultApiPath || '/chat/completions').trim();
   }
 
-  /** Resolves vision fallback provider for a model. Falls back: model override → provider default → undefined. */
-  resolveVisionFallback(pickerId: string, family: string): string | undefined {
-    const p = this.provider(family);
+  /** Resolves vision fallback provider for a model. */
+  resolveVisionFallback(pickerId: string, familyOrUuid: string): string | undefined {
+    const p = this.provider(familyOrUuid);
     return p.modelApiPaths?.[pickerId + '.vision'] || p.visionFallback || undefined;
   }
 
