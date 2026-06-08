@@ -62,9 +62,12 @@ export class MiniGitPanel implements vscode.WebviewViewProvider {
       const br = (await this._runGit('rev-parse --abbrev-ref HEAD')).trim();
       const rp = (await this._runGit('rev-parse --show-toplevel')).trim().split('/').pop() || '';
       const st = (await this._runGit('status --short')).trim();
-      const sc = (await this._runGit('diff --cached --name-only')).trim().split('\n').filter(Boolean).length;
-      const uc = (await this._runGit('diff --name-only')).trim().split('\n').filter(Boolean).length;
-      this.view.webview.postMessage({ type: 'gitData', payload: { branch: br, repo: rp, statusShort: st, stagedCount: sc, unstagedCount: uc } });
+      // Use git status --porcelain for accurate per-file counting (deduped, matches VS Code)
+      const statusLines = (await this._runGit('status --porcelain')).trim().split('\n').filter(Boolean);
+      const totalChanged = statusLines.length;
+      const stagedCount = statusLines.filter(l => l[0] !== ' ' && l[0] !== '?').length;
+      const unstagedCount = statusLines.filter(l => l[1] !== ' ').length;
+      this.view.webview.postMessage({ type: 'gitData', payload: { branch: br, repo: rp, statusShort: st, stagedCount, unstagedCount, totalChanged } });
     } catch { this.view.webview.postMessage({ type: 'gitData', payload: {} }); }
   }
 
@@ -76,7 +79,9 @@ export class MiniGitPanel implements vscode.WebviewViewProvider {
     const threshold = vscode.workspace.getConfiguration('copilot-adapter-kit').get<number>('maxDiffFiles', 500);
     const stagedFiles = (await this._runGit('diff --cached --name-only')).trim().split('\n').filter(Boolean);
     const unstagedFiles = (await this._runGit('diff --name-only')).trim().split('\n').filter(Boolean);
-    const totalFiles = stagedFiles.length + unstagedFiles.length;
+    // Use git status for accurate file count (dedupes staged+unstaged same files, matches VS Code git tab)
+    const statusLines = (await this._runGit('status --porcelain')).trim().split('\n').filter(Boolean);
+    const totalFiles = statusLines.length;
 
     if (totalFiles > threshold) {
       const parts: string[] = [];
@@ -136,8 +141,7 @@ export class MiniGitPanel implements vscode.WebviewViewProvider {
       const utDisp = usrT ? '\n\n```\n' + usrT.slice(0,600) + (usrT.length>600?'\n... (truncated)':'') + '\n```' : '\n\n*(none configured)*';
       const gpDisp = gpc ? '\n\n```\n' + gpc.slice(0,600) + (gpc.length>600?'\n... (truncated)':'') + '\n```' : '\n\n*(built-in default)*';
       const promptPreview = prompt.length>1200 ? prompt.slice(0,1200)+'\n\n... *(truncated, '+prompt.length+' chars total)*' : prompt;
-      const diffNote = compressed ? `\n| **Diff Mode** | compressed (${fileCount} files > ${vscode.workspace.getConfiguration('copilot-adapter-kit').get<number>('maxDiffFiles', 500)} threshold) |` : `\n| **Diff Mode** | full (${fileCount} files) |`;
-      const trace = [
+      const tracePrefix = [
         '# 🔬 Request Inspector',
         '',
         '| Property | Value |',
@@ -150,6 +154,7 @@ export class MiniGitPanel implements vscode.WebviewViewProvider {
         '| **Repo** | `' + repo + '` |',
         '| **User Guidance** | ' + (userMsg?.trim() || '*(none)*') + ' |',
         '| **Files Changed** | ' + fileCount + ' |',
+        '| **Diff Mode** | ' + (compressed ? 'compressed (threshold: ' + vscode.workspace.getConfiguration('copilot-adapter-kit').get<number>('maxDiffFiles', 500) + ')' : 'full') + ' |',
         '',
         '---',
         '## 🧠 System Prompt' + spDisp,
@@ -176,6 +181,10 @@ export class MiniGitPanel implements vscode.WebviewViewProvider {
         const completionTokens = estTokens(r.text || '');
         const totalTokens = promptTokens + completionTokens;
         const tokPerSec = elapsedMs > 0 ? Math.round(completionTokens / (elapsedMs / 1000)) : 0;
+        const secs = (elapsedMs / 1000).toFixed(1);
+        // Append response + timing + token info to trace
+        const respPreview = r.text ? (r.text.length > 2000 ? r.text.slice(0,2000) + '\n\n... *(truncated, ' + r.text.length + ' chars)*' : r.text) : '*(empty)*';
+        const trace = tracePrefix + '\n\n---\n## 📥 LLM Response\n\n```\n' + respPreview + '\n```\n\n---\n## 📊 Performance\n\n| Metric | Value |\n|--------|-------|\n| **Prompt tokens** | ~' + promptTokens + ' |\n| **Completion tokens** | ~' + completionTokens + ' |\n| **Total tokens** | ~' + totalTokens + ' |\n| **Elapsed** | ' + secs + 's |\n| **Speed** | ' + tokPerSec + ' tok/s |';
         this.view?.webview.postMessage({ type: 'genResult', payload: { ...r, provider: prov.name || family, model, trace, tokens: totalTokens, elapsedMs, completionTokens, tokPerSec } });
       };
       const sink: StreamEvents = {

@@ -159,7 +159,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 <script>
 const vsc=acquireVsCodeApi();
-let st={providers:{},models:[],builtinModels:[],copilotModels:[],maxTokens:0,logLevel:'quiet',stabilizeTools:false,hiddenBuiltins:[],hiddenCustomModels:[],keys:{},visionFallbackModel:'',visionFallbackAlways:false,systemPrompt:'',userPromptTemplate:'',gitPrompt:'',maxDiffFiles:500,gitStaged:'',gitUnstaged:'',gitStatusShort:'',gitBranch:'',gitRepo:''};
+let st={providers:{},models:[],builtinModels:[],copilotModels:[],maxTokens:0,logLevel:'quiet',stabilizeTools:false,hiddenBuiltins:[],hiddenCustomModels:[],keys:{},visionFallbackModel:'',visionFallbackAlways:false,systemPrompt:'',userPromptTemplate:'',gitPrompt:'',maxDiffFiles:500,gitStaged:'',gitUnstaged:'',gitStatusShort:'',gitBranch:'',gitRepo:'',gitFetched:false};
 let active='providers';
 
 // SVG icons — exact Daakia paths (24x24 viewBox, rendered at 14px)
@@ -560,8 +560,8 @@ function rTools(){
       <span style="font-size:9px;color:var(--color-text-muted)">Compress to --stat above this</span>
     </div>
     <div class="inline-row" style="gap:8px;margin-bottom:6px">
-      <button class="btn btn-primary btn-sm" onclick="genCommit('staged')" ${!hasProviders?'disabled style="opacity:.4"':''} id="btnStaged">🧠 Staged Diff</button>
-      <button class="btn btn-primary btn-sm" onclick="genCommit('unstaged')" ${!hasProviders?'disabled style="opacity:.4"':''} id="btnUnstaged">🧠 Unstaged Diff</button>
+      <button class="btn btn-primary btn-sm" onclick="genCommit('staged')" ${!hasProviders||(st.gitFetched&&!st.gitStaged)?'disabled style="opacity:.4"':''} id="btnStaged">🧠 Staged Diff</button>
+      <button class="btn btn-primary btn-sm" onclick="genCommit('unstaged')" ${!hasProviders||(st.gitFetched&&!st.gitUnstaged)?'disabled style="opacity:.4"':''} id="btnUnstaged">🧠 Unstaged Diff</button>
       <span id="genSpinner" style="display:none;animation:spin .8s linear infinite;font-size:18px">⏳</span>
       ${!hasProviders?'<span class="badge badge-warning">No providers configured</span>':''}
     </div>
@@ -863,7 +863,7 @@ function updBadges(){const provs=Object.values(st.providers).filter(p=>p&&!p._de
 function gid(id){return document.getElementById(id)}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')}
 
-window.addEventListener('message',e=>{if(e.data.type==='state'){st=e.data.payload;const provs=Object.keys(st.providers||{}).filter(k=>st.providers[k]&&!st.providers[k]._deleted);if(modelFilter&&!provs.includes(modelFilter))modelFilter=provs[0]||'';render()}else if(e.data.type==='gitState'){st.gitStaged=e.data.payload.staged;st.gitUnstaged=e.data.payload.unstaged;st.gitStatusShort=e.data.payload.statusShort;st.gitBranch=e.data.payload.branch;st.gitRepo=e.data.payload.repo;render()}else if(e.data.type==='gitError'){toast('❌ '+e.data.payload)}else if(e.data.type==='genCommitMsgResult'){renderGenResult(e.data.payload)}});
+window.addEventListener('message',e=>{if(e.data.type==='state'){st=e.data.payload;const provs=Object.keys(st.providers||{}).filter(k=>st.providers[k]&&!st.providers[k]._deleted);if(modelFilter&&!provs.includes(modelFilter))modelFilter=provs[0]||'';render()}else if(e.data.type==='gitState'){st.gitStaged=e.data.payload.staged;st.gitUnstaged=e.data.payload.unstaged;st.gitStatusShort=e.data.payload.statusShort;st.gitBranch=e.data.payload.branch;st.gitRepo=e.data.payload.repo;st.gitFetched=true;render()}else if(e.data.type==='gitError'){toast('❌ '+e.data.payload)}else if(e.data.type==='genCommitMsgResult'){renderGenResult(e.data.payload)}});
 vsc.postMessage({type:'getState'});
 document.getElementById('icoProv').innerHTML = iGlobe();
 </script>

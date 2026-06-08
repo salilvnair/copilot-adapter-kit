@@ -591,7 +591,9 @@ export class SettingsPanel {
     const threshold = vscode.workspace.getConfiguration('copilot-adapter-kit').get<number>('maxDiffFiles', 500);
     const flag = which === 'staged' ? '--cached' : '';
     const files = (await this._runGit('diff ' + flag + ' --name-only')).trim().split('\n').filter(Boolean);
-    const fileCount = files.length;
+    // Use git status for accurate count (dedupes, matches VS Code git tab)
+    const statusLines = (await this._runGit('status --porcelain')).trim().split('\n').filter(Boolean);
+    const fileCount = statusLines.length;
 
     if (fileCount > threshold) {
       const stat = (await this._runGit('diff ' + flag + ' --stat')).trim();

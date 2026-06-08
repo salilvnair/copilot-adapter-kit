@@ -14,9 +14,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .input-area textarea{flex:1;background:var(--input);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 34px 7px 8px;font-size:11px;font-family:inherit;resize:none;height:38px;outline:none;line-height:1.4}
 .input-area textarea:focus{border-color:var(--primary);box-shadow:0 0 0 2px rgba(99,102,241,.15)}
 .input-area textarea::placeholder{color:var(--muted)}
-.sparkle-btn{position:absolute;right:3px;top:50%;transform:translateY(-50%);background:transparent;color:rgba(255,255,255,.25);border:none;border-radius:5px;width:26px;height:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;transition:all 120ms;z-index:2}
-.sparkle-btn:hover{background:rgba(99,102,241,.12);color:rgba(255,255,255,.85)}
-.sparkle-btn:disabled{opacity:.3;cursor:not-allowed}
+.sparkle-btn{position:absolute;right:3px;top:50%;transform:translateY(-50%);background:transparent;color:#f0f0f0;border:none;border-radius:5px;width:26px;height:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;transition:all 120ms;z-index:2}
+.sparkle-btn:hover{background:rgba(74, 220, 186, 0.43);color:#fff;box-shadow:0 0 8px rgba(94,168,242,.3)}
+.sparkle-btn:disabled{background:transparent;color:rgba(255,255,255,.08);cursor:not-allowed}
 .spinner{animation:spin .8s linear infinite}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .dd-row{padding:8px 8px 4px;display:flex;align-items:center;gap:8px;font-size:10px;color:var(--muted);flex-shrink:0}
@@ -98,6 +98,27 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .empty-state{color:var(--muted);padding:16px;text-align:center;font-size:11px}
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:2px}
+
+/* ── MdViewer styles (always available even without bundle) ── */
+.mdv-root{font-size:12.5px;line-height:1.7;color:#e4e4e7;word-break:break-word;overflow-wrap:anywhere}
+.mdv-root h1,.mdv-root h2,.mdv-root h3{font-weight:600;margin:0.9em 0 0.35em;line-height:1.3;color:#f4f4f5}
+.mdv-root h1{font-size:1.22em;border-bottom:1px solid rgba(255,255,255,.07);padding-bottom:.3em}
+.mdv-root h2{font-size:1.1em}
+.mdv-root h3{font-size:1em;color:#c4b5fd}
+.mdv-root p{margin:0.45em 0}
+.mdv-root strong{font-weight:650;color:#f4f4f5}
+.mdv-root em{font-style:italic;color:#d4d4d8}
+.mdv-root a{color:#818cf8;text-decoration:underline;text-underline-offset:2px}
+.mdv-root hr{border:none;border-top:1px solid rgba(255,255,255,.09);margin:.9em 0}
+.mdv-root ul,.mdv-root ol{padding-left:1.35em;margin:.35em 0}
+.mdv-root li{margin:.18em 0}
+.mdv-root blockquote{margin:.55em 0;padding:.4em .85em;border-left:3px solid rgba(139,92,246,.5);background:rgba(139,92,246,.06);border-radius:0 6px 6px 0;color:#a1a1aa;font-style:italic}
+.mdv-root .mdv-inline-code,.mdv-root code:not(.hljs){font-family:monospace;font-size:.87em;background:rgba(139,92,246,.13);color:#c084fc;padding:1px 5px;border-radius:4px;border:1px solid rgba(139,92,246,.22)}
+.mdv-code-block{margin:.65em 0;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,.08);background:#0d0d10}
+.mdv-code-header{display:flex;align-items:center;justify-content:space-between;padding:4px 10px;background:rgba(255,255,255,.035);border-bottom:1px solid rgba(255,255,255,.06)}
+.mdv-lang-pill{font-size:9.5px;font-family:monospace;color:rgba(255,255,255,.3);text-transform:lowercase;padding:1px 6px;background:rgba(255,255,255,.05);border-radius:10px}
+.mdv-code-block pre{margin:0;padding:10px 13px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}
+.mdv-code-block pre code{font-family:monospace;font-size:11px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
 </style>
 </head>
 <body>
@@ -124,7 +145,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 
 <script>
 var vsc=acquireVsCodeApi();
-var gitBranch='',gitRepo='',gitStatus='',stagedCount=0,unstagedCount=0;
+var gitBranch='',gitRepo='',gitStatus='',stagedCount=0,unstagedCount=0,totalChanged=0,hasChanges=false;
 var genFamily='',genModel='';
 var generating=false,genText='',modelsByFamily={};
 var genProvName='',genModelName='';
@@ -182,8 +203,16 @@ function populateModels(){
   genModel=opts[0].v;
 }
 
+function updateSparkle(){
+  var btn=$('genBtn'); if(!btn)return;
+  if(!hasChanges){
+    btn.disabled=true; btn.title='No changes to commit';
+  }else if(!generating){
+    btn.disabled=false; btn.title='Generate commit message';
+  }
+}
 function doGenerate(){
-  if(generating)return;
+  if(generating||!hasChanges)return;
   genFamily=ddProv?ddProv.value:'';
   genModel=ddModel?ddModel.value:'';
   var msg=$('msgInput').value.trim();
@@ -200,8 +229,9 @@ function renderDiff(){
     h+='<div class="badge-row">';
     if(gitBranch)h+='<span class="badge badge-info">🌿 '+esc(gitBranch)+'</span>';
     if(gitRepo)h+='<span class="badge badge-primary">📁 '+esc(gitRepo)+'</span>';
-    if(stagedCount)h+='<span class="badge badge-success">'+stagedCount+' staged</span>';
-    if(unstagedCount)h+='<span class="badge badge-warning">'+unstagedCount+' unstaged</span>';
+    if(totalChanged)h+='<span class="badge badge-info">📝 '+totalChanged+' files</span>';
+    if(stagedCount)h+='<span class="badge badge-success">✅ '+stagedCount+' staged</span>';
+    if(unstagedCount)h+='<span class="badge badge-warning">⚠ '+unstagedCount+' unstaged</span>';
     if(!stagedCount&&!unstagedCount)h+='<span class="badge" style="background:rgba(255,255,255,.05)">no changes</span>';
     h+='</div>';
   }
@@ -255,8 +285,9 @@ function mdRenderFallback(text, el){
 
 function renderResult(mode,errMsg){
   var d=$('resultArea'),btn=$('genBtn');if(!d)return;
-  if(btn){btn.disabled=false;btn.innerHTML='✨'}
   generating=false;
+  updateSparkle();
+  if(btn && !hasChanges){btn.disabled=true;btn.innerHTML='✨'}
   if(mode==='loading'){
     d.innerHTML='<div class="loading"><span class="spinner">⏳</span> Generating...</div>';
     generating=true;if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner">⏳</span>'}
@@ -293,12 +324,13 @@ function renderResult(mode,errMsg){
         +'<div class="msg-scroll"><div class="msg-md-wrap" id="mdContent"></div></div>'
         +(badgeHtml?'<div class="msg-footer">'+badgeHtml+'</div>':'')
         +'</div>';
-      // Render markdown — built-in fallback always works, MdViewer overrides if loaded
+      // Render markdown: built-in fallback first, then try rich MdViewer
       var mdEl=document.getElementById('mdContent');
+      if(!mdEl)return;
       mdRenderFallback(genText, mdEl);
+      // Only override with MdViewer if it exists and won't break things
       if(typeof window.MdRender==='function'){
-        // Rich renderer available — replace with full version
-        window.MdRender(genText, mdEl);
+        try{ window.MdRender(genText, mdEl); }catch(e){ /* keep fallback */ }
       }
     }else{d.innerHTML=''}
   }
@@ -336,7 +368,7 @@ function toggleAudit(){
   if(area)area.classList.toggle('show',auditOpen);
   if(auditOpen && ac && typeof window.MdRender==='function'){
     mdRenderFallback(genTraceData||'*No trace data yet.*', ac);
-    if(typeof window.MdRender==='function') window.MdRender(genTraceData||'*No trace data yet.*', ac);
+    if(typeof window.MdRender==='function'){ try{window.MdRender(genTraceData||'*No trace data yet.*', ac);}catch(e){} }
   }
 }
 function toggleAuditCard(){
@@ -363,7 +395,8 @@ window.addEventListener('message',function(e){
   var p=e.data.payload||{},t=e.data.type;
   if(t==='gitData'){
     gitBranch=p.branch||'';gitRepo=p.repo||'';gitStatus=p.statusShort||'';
-    stagedCount=p.stagedCount||0;unstagedCount=p.unstagedCount||0;
+    stagedCount=p.stagedCount||0;unstagedCount=p.unstagedCount||0;totalChanged=p.totalChanged||p.stagedCount+p.unstagedCount||0;
+    hasChanges=totalChanged>0; updateSparkle();
     renderDiff();
   }else if(t==='providers'){
     var fams=p.families||[];
@@ -378,13 +411,14 @@ window.addEventListener('message',function(e){
   }else if(t==='genToken'){
     genText+=e.data.payload;
   }else if(t==='genResult'){
-    var b=$('genBtn');if(b){b.disabled=false;b.innerHTML='✨'}
     generating=false;
+    var b=$('genBtn');if(b){b.innerHTML='✨'}
+    updateSparkle();
     genProvName=p.provider||'';genModelName=p.model||'';
     genTokens=p.tokens||0; genElapsed=p.elapsedMs||0; genTokPerSec=p.tokPerSec||0;
     genTraceData=p.trace||'*No trace data available.*';
     // If audit is open, refresh it with new trace
-    if(auditOpen){ var ac=$('auditContent'); if(ac){mdRenderFallback(genTraceData,ac); if(typeof window.MdRender==='function')window.MdRender(genTraceData,ac);} }
+    if(auditOpen){ var ac=$('auditContent'); if(ac){mdRenderFallback(genTraceData,ac); if(typeof window.MdRender==='function'){try{window.MdRender(genTraceData,ac);}catch(e){}} } }
     if(p.error){genText='';renderResult('error',p.error)}
     else{genText=p.text||genText;renderResult('')}
   }
