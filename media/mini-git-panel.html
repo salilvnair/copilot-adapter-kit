@@ -73,6 +73,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .audit-card.collapsed .card-header{margin-bottom:0}
 .audit-card.collapsed .chevron-btn{width:18px;height:18px}
 /* Audit toggle btn in dd-row */
+
+.settings-btn{width:24px;height:24px;border:none;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 120ms;background:rgba(34,197,94,.08);color:rgba(34,197,94,.5);flex-shrink:0}
+.settings-btn:hover{background:rgba(34,197,94,.15);color:#4ade80}
 .audit-btn{width:24px;height:24px;border:none;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 120ms;background:rgba(255,255,255,.04);color:rgba(255,255,255,.25);flex-shrink:0;margin-left:4px}
 .audit-btn:hover{background:rgba(99,102,241,.1);color:rgba(255,255,255,.6)}
 .audit-btn.active{background:rgba(99,102,241,.18);color:var(--primary);box-shadow:0 0 0 1px rgba(99,102,241,.25)}
@@ -131,7 +134,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 <div class="dd-row">
   <span>Provider:</span><div class="dropdown-wrap" id="ddProv"></div>
   <span style="margin-left:4px">Model:</span><div class="dropdown-wrap" id="ddModel"></div>
-  <button class="audit-btn" id="auditBtn" onclick="toggleAudit()" title="Toggle debug audit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></button>
+  <button class="audit-btn" id="auditBtn" onclick="toggleAudit()" title="Toggle debug audit" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></button>
+  <button class="settings-btn" onclick="openSettings()" title="CAK Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 </div>
 <div class="result-area" id="resultArea"></div>
 <div class="audit-area" id="auditArea"><div class="audit-card" id="auditCard"><div class="card-header"><button class="chevron-btn" onclick="toggleAuditCard()" title="Collapse/Expand"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="card-header-actions"></div></div><div id="auditContent"></div></div></div>
@@ -145,6 +149,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 
 <script>
 var vsc=acquireVsCodeApi();
+function openSettings(){vsc.postMessage({type:'openSettings'});}
 var gitBranch='',gitRepo='',gitStatus='',stagedCount=0,unstagedCount=0,totalChanged=0,hasChanges=false;
 var genFamily='',genModel='';
 var generating=false,genText='',modelsByFamily={};
@@ -248,10 +253,9 @@ function renderDiff(){
   d.innerHTML=h;
 }
 
-// ── Built-in Markdown renderer (always available) ──
+// ── Built-in Markdown fallback (reliable, always produces valid HTML) ──
 function mdRenderFallback(text, el){
   if(!el)return;
-  // Escape HTML first, then apply markdown
   var out=esc(text);
   // Fenced code blocks
   out=out.replace(/```(\w*)\n([\s\S]*?)```/g,function(_,lang,code){
@@ -259,27 +263,17 @@ function mdRenderFallback(text, el){
   });
   // Inline code
   out=out.replace(/`([^`]+)`/g,'<code class="mdv-inline-code">$1</code>');
-  // Bold
+  // Bold / italic
   out=out.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-  // Italic
   out=out.replace(/\*(.+?)\*/g,'<em>$1</em>');
-  // Headings
-  out=out.replace(/^### (.+)$/gm,'<h3>$1</h3>');
-  out=out.replace(/^## (.+)$/gm,'<h2>$1</h2>');
-  out=out.replace(/^# (.+)$/gm,'<h1>$1</h1>');
-  // Unordered lists
-  out=out.replace(/^- (.+)$/gm,'<li>$1</li>');
-  out=out.replace(/(<li>.*<\/li>)/s,function(m){return '<ul>'+m+'</ul>';});
-  // Blockquotes
-  out=out.replace(/^> (.+)$/gm,'<blockquote><p>$1</p></blockquote>');
-  // Horizontal rules
-  out=out.replace(/^---$/gm,'<hr>');
-  // Links
-  out=out.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2">$1</a>');
-  // Paragraphs: double newlines
-  out=out.replace(/\n\n/g,'</p><p>');
-  out='<div class="mdv-root"><p>'+out+'</p></div>';
-  el.innerHTML=out;
+  // Split into paragraphs, wrap each in <p>
+  var paras=out.split(/\n\n+/);
+  out=paras.map(function(p){
+    p=p.trim(); if(!p)return'';
+    // Single newlines → <br>
+    return'<p>'+p.replace(/\n/g,'<br>')+'</p>';
+  }).join('');
+  el.innerHTML='<div class="mdv-root">'+out+'</div>';
   el.classList.add('mdv-root');
 }
 
@@ -324,13 +318,13 @@ function renderResult(mode,errMsg){
         +'<div class="msg-scroll"><div class="msg-md-wrap" id="mdContent"></div></div>'
         +(badgeHtml?'<div class="msg-footer">'+badgeHtml+'</div>':'')
         +'</div>';
-      // Render markdown: built-in fallback first, then try rich MdViewer
+      // Render markdown via MdViewer (same as audit card)
       var mdEl=document.getElementById('mdContent');
       if(!mdEl)return;
-      mdRenderFallback(genText, mdEl);
-      // Only override with MdViewer if it exists and won't break things
       if(typeof window.MdRender==='function'){
-        try{ window.MdRender(genText, mdEl); }catch(e){ /* keep fallback */ }
+        window.MdRender(genText, mdEl);
+      }else{
+        mdRenderFallback(genText, mdEl);
       }
     }else{d.innerHTML=''}
   }
@@ -414,6 +408,8 @@ window.addEventListener('message',function(e){
     generating=false;
     var b=$('genBtn');if(b){b.innerHTML='✨'}
     updateSparkle();
+    // Show inspector icon once we have a result
+    var ab=$('auditBtn'); if(ab)ab.style.display='';
     genProvName=p.provider||'';genModelName=p.model||'';
     genTokens=p.tokens||0; genElapsed=p.elapsedMs||0; genTokPerSec=p.tokPerSec||0;
     genTraceData=p.trace||'*No trace data available.*';

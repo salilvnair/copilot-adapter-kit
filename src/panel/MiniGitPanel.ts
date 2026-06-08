@@ -19,6 +19,7 @@ export class MiniGitPanel implements vscode.WebviewViewProvider {
     wv.webview.onDidReceiveMessage(async (m: { type: string; payload?: any }) => {
       if (m.type === 'getData') { this._sendProvidersAndModels(); await this._refreshGit(); }
       else if (m.type === 'generate') await this._generate(m.payload?.uuid, m.payload?.modelId, m.payload?.userMsg);
+      else if (m.type === 'openSettings') vscode.commands.executeCommand('copilot-adapter-kit.openPanel');
     });
     setTimeout(() => { this._refreshGit(); this._sendProvidersAndModels(); }, 300);
   }
