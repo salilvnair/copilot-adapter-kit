@@ -35,8 +35,14 @@ export function HoldToConfirm({
   // all, so an rAF-driven hold silently stalls the moment the panel stops being
   // the visible tab. Interval callbacks are throttled there, never stopped, and
   // reading Date.now() keeps the elapsed time honest either way.
-  const begin = () => {
+  const begin = (e?: React.PointerEvent<HTMLButtonElement>) => {
     if (done.current || started.current !== undefined) return;
+    // Capture the pointer for the duration. The label counts down, which changes
+    // the button's width, and without capture the cursor can end up outside the
+    // resized box — pointerleave then cancels a hold the user never released.
+    if (e) {
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* not supported */ }
+    }
     started.current = Date.now();
     setPct(0.5);
     timer.current = setInterval(() => {
@@ -61,7 +67,6 @@ export function HoldToConfirm({
       className="hold-b"
       onPointerDown={begin}
       onPointerUp={stop}
-      onPointerLeave={stop}
       onPointerCancel={stop}
       onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') begin(); }}
       onKeyUp={stop}
@@ -70,7 +75,7 @@ export function HoldToConfirm({
       style={{ ['--hold' as string]: `${pct}%` }}
     >
       <I.Circle size={12} />
-      <span>{pct > 0 && pct < 100 ? `Keep holding — ${remaining}s` : `${label} — ${seconds}s`}</span>
+      <span>{label} &mdash; <span className="mono">{pct > 0 && pct < 100 ? remaining : seconds}s</span></span>
     </button>
   );
 }

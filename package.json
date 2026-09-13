@@ -330,6 +330,8 @@
     "watch:webview": "npm --prefix webview-ui run dev",
     "typecheck": "tsc --noEmit -p ./ && npm --prefix webview-ui run typecheck",
     "test": "npm run compile && node test/run.js",
+    "test:e2e": "npm --prefix webview-ui run test:e2e",
+    "test:all": "npm test && npm run test:e2e",
     "logo": "node scripts/generate-icon-font.js",
     "package": "npx @vscode/vsce package",
     "publish": "npx @vscode/vsce publish",

@@ -212,6 +212,8 @@ behaviour-heavy widgets. Three entries build into `media/dist/`, one per surface
 | `npm run compile` | Webview build + `tsc` — what F5 and packaging use |
 | `npm run typecheck` | Type-checks the extension and the webview |
 | `npm test` | Compiles, then runs the spend-guard, webview-host and message-contract suites |
+| `npm run test:e2e` | Playwright drives every screen in a real browser |
+| `npm run test:all` | Both of the above — what CI runs |
 
 Every surface is built: the settings shell with Providers, Models and API Keys; the
 Spend Guard dashboard and its history; Configuration, Git Tools, JSON, Request Dumps,
@@ -227,6 +229,12 @@ in `src/icons.tsx` replaces them.
 
 Run **Copilot Adapter Kit: Open UI Parity Harness** from an Extension Development Host to
 render every primitive side by side against the mock. It is registered only in development.
+
+`webview-ui/e2e/` drives the real screens in Chromium against the Vite dev server: filters
+narrow lists, menu entries fire, a destructive action asks before it acts, a hold has to be
+held, the drawer opens at 330 px and drags. They assert behaviour, not screenshots, so they
+do not break when a colour changes. First run needs the browser:
+`npx --prefix webview-ui playwright install chromium`.
 
 `test/message-contract.test.js` checks that every message the UI can post has a handler
 on the extension side, and that no action or handler has gone stale. That is the failure
