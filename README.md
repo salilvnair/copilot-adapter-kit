@@ -197,6 +197,83 @@ When you see "tool list is unstable" warnings, enable `stabilizeTools` in the Co
 
 ---
 
+## Webview UI
+
+The panels are built from `webview-ui/` — React 19 + Vite 6 + Tailwind 4, with
+[`@salilvnair/dui`](https://www.npmjs.com/package/@salilvnair/dui) 1.0.8 available for
+behaviour-heavy widgets. Three entries build into `media/dist/`, one per surface:
+`settings`, `spend-guard` and `sidebar`.
+
+| Command | What it does |
+|---|---|
+| `npm run install:webview` | Install the webview dependencies (once, after cloning) |
+| `npm run build:webview` | Build the bundles into `media/dist/` |
+| `npm run watch:webview` | Vite dev server with hot reload, for working on a screen |
+| `npm run compile` | Webview build + `tsc` — what F5 and packaging use |
+| `npm run typecheck` | Type-checks the extension and the webview |
+| `npm test` | Compiles, then runs the spend-guard and webview-host suites |
+
+Every surface is built: the settings shell with Providers, Models and API Keys; the
+Spend Guard dashboard and its history; Configuration, Git Tools, JSON, Request Dumps,
+Dev Tools, Bin and the Danger Zone; and the Git AI sidebar.
+
+`src/styles/cak.css` is **extracted verbatim from the approved UI mock** and is the
+specification, not a starting point. Components in `src/ui/` emit that markup unchanged,
+so what renders is what was signed off. Add a primitive rather than restyling inline.
+
+There are no emoji anywhere in the UI. They render differently on every platform, sit off
+the baseline of the text beside them, and cannot take the theme's colour — the stroked set
+in `src/icons.tsx` replaces them.
+
+Run **Copilot Adapter Kit: Open UI Parity Harness** from an Extension Development Host to
+render every primitive side by side against the mock. It is registered only in development.
+
+`npm run watch:webview` serves the screens in a plain browser for design work. With no
+extension host to answer, they fall back to sample data from `src/app/fixture.ts` — every
+such page carries an amber **Sample data** bar, and the fixture is dropped from the
+production bundle by `import.meta.env.DEV`.
+
+---
+
+## Spend Guard
+
+BYOK means the bill is yours. GitHub Copilot ships with a ceiling you have to deliberately raise; this adapter does the same, and it is **on by default**.
+
+Every request is checked *before it leaves your machine*. A blocked request is never sent, so it costs nothing.
+
+| Limit | Default | What it stops |
+|---|---|---|
+| `budget.dailyTokenLimit` | `2,000,000` tokens/day | Total input + output across all providers |
+| `budget.dailyCostLimitUsd` | `$25`/day | Estimated spend, from each model's `pricing` string |
+| `budget.maxInputTokensPerRequest` | `200,000` tokens | One oversized request blowing the budget |
+| `budget.maxOutputTokens` | `0` → the model's `maxOut` | Unbounded generation — output is **never** uncapped |
+| `budget.maxTurnsPerConversation` | `50` requests | **Runaway agent loops** |
+
+That last one matters most. In agent mode every tool round-trip resends the whole conversation, so a loop left running overnight can burn tens of millions of tokens on its own. The turn guard cuts it off.
+
+Usage is recorded from the provider's own usage stream where available, and from a deliberately conservative estimate where it is not. The status bar shows today's total; click it for a per-model breakdown.
+
+```
+$(cak-icon) 412.3K · $1.87        ← normal
+$(cak-icon) 1.71M · $22.40        ← amber at 80%
+$(cak-icon) 2.00M · $25.00        ← red, requests blocked
+$(cak-icon) ⚠ UNCAPPED 8.4M       ← red, no protection at all
+```
+
+### Turning it off
+
+`Copilot Adapter Kit: Disable Spend Guard` removes every limit above. It requires a modal confirmation *and* typing `DISABLE`, and the status bar stays red for as long as protection is off. Only do this when you are watching the run.
+
+Re-enable with `Copilot Adapter Kit: Enable Spend Guard`, or from the **Spend Guard** tab in the panel.
+
+### Limits are per calendar day
+
+Counters reset at local midnight. `Copilot Adapter Kit: Reset Today's Usage` zeroes them early — it clears the local counters only; your provider has still billed what was already spent.
+
+Set any limit to `0` to disable that one check individually while leaving the rest in force.
+
+---
+
 ## Commands
 
 All commands available via `Cmd+Shift+P` under `Copilot Adapter Kit:`.
@@ -213,6 +290,10 @@ All commands available via `Cmd+Shift+P` under `Copilot Adapter Kit:`.
 | **Open Settings** | Jump to raw JSON settings |
 | **Show Logs** | Open the output channel |
 | **Open Dumps Folder** | Reveal request dumps in Finder |
+| **Show Token Usage** | Today's spend, per model, with the active limits |
+| **Reset Today's Usage** | Zero the local usage counters |
+| **Disable Spend Guard** | ⚠️ Remove all spend limits (double confirmation) |
+| **Enable Spend Guard** | Restore the default protection |
 
 ---
 
@@ -435,6 +516,21 @@ All settings under `copilot-adapter-kit.*`.
       "visionFallback": "openai:gpt-5.2"
     }
   }
+}
+```
+
+### `budget.*`
+
+Spend Guard limits — see [Spend Guard](#spend-guard).
+
+```jsonc
+{
+  "copilot-adapter-kit.budget.enforce": true,
+  "copilot-adapter-kit.budget.dailyTokenLimit": 2000000,
+  "copilot-adapter-kit.budget.dailyCostLimitUsd": 25,
+  "copilot-adapter-kit.budget.maxInputTokensPerRequest": 200000,
+  "copilot-adapter-kit.budget.maxOutputTokens": 0,
+  "copilot-adapter-kit.budget.maxTurnsPerConversation": 50
 }
 ```
 

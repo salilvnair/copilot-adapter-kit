@@ -7,6 +7,15 @@
             "problemMatcher": "$tsc-watch",
             "isBackground": true,
             "group": "build"
+        },
+        {
+            "type": "npm",
+            "script": "compile",
+            "problemMatcher": "$tsc",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
         }
     ]
 }

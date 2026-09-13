@@ -1,0 +1,10 @@
+@import "tailwindcss";
+@import "./fonts.css";
+
+/* dui's own stylesheet. It keys its light palette off .vscode-light, the class
+ * VS Code stamps on the body, so it follows the editor theme the same way our
+ * scope does. Imported before cak.css: where both define a class, the approved
+ * mock wins. */
+@import "@salilvnair/dui/style.css";
+
+@import "./cak.css";

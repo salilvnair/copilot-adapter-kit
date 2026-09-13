@@ -1,8 +1,11 @@
 // entry.ts — SpringApplication.run()
 import vscode from 'vscode';
+import { fmtTokens, type BudgetStatus } from './kernel/budget';
 import { Context } from './kernel/context';
 import { MiniGitPanel } from './panel/MiniGitPanel';
 import { SettingsPanel } from './panel/SettingsPanel';
+import { SpendGuardPanel } from './panel/SpendGuardPanel';
+import { WebviewHost } from './panel/webview-host';
 
 let instance: Context | undefined;
 
@@ -10,13 +13,13 @@ export async function activate(ext: vscode.ExtensionContext): Promise<void> {
   const ctx = await Context.bootstrap(ext);
   instance = ctx;
 
-  // Status bar entry — opens the Daakia-styled settings panel
+  // Status bar entry — live spend readout, click to open usage
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  status.text = '$(cak-icon)';
-  status.tooltip = 'Copilot Adapter Kit — Configure providers, models & keys';
-  status.command = 'copilot-adapter-kit.openPanel';
+  status.command = 'copilot-adapter-kit.showUsage';
+  const paint = (s: BudgetStatus) => _paintStatus(status, s);
+  paint(ctx.budget.status());
   status.show();
-  ext.subscriptions.push(status);
+  ext.subscriptions.push(status, ctx.budget.onChange(paint));
 
   ext.subscriptions.push(
     vscode.commands.registerCommand('copilot-adapter-kit.openPanel',     () => SettingsPanel.show(ext, ctx)),
@@ -33,7 +36,32 @@ export async function activate(ext: vscode.ExtensionContext): Promise<void> {
       (vscode.window as any).showOutputChannel?.() || ctx.tracer.info('')),
     vscode.commands.registerCommand('copilot-adapter-kit.openDumps',     () => ctx.tracer.openDumpsFolder()),
     vscode.commands.registerCommand('copilot-adapter-kit.generateCommitMessage', () => _generateCommitMessage(ext, ctx)),
+    vscode.commands.registerCommand('copilot-adapter-kit.showUsage',          () => SpendGuardPanel.show(ext, ctx)),
+    vscode.commands.registerCommand('copilot-adapter-kit.resetBudget',        () => _resetBudget(ctx)),
+    vscode.commands.registerCommand('copilot-adapter-kit.disableSpendGuard',  () => _setSpendGuard(ctx, false)),
+    vscode.commands.registerCommand('copilot-adapter-kit.enableSpendGuard',   () => _setSpendGuard(ctx, true)),
   );
+
+  // Development only — the parity harness is for checking the UI against the
+  // approved mock, and has no meaning in an installed extension.
+  if (ext.extensionMode === vscode.ExtensionMode.Development) {
+    void vscode.commands.executeCommand('setContext', 'copilot-adapter-kit.dev', true);
+    ext.subscriptions.push(
+      vscode.commands.registerCommand('copilot-adapter-kit.openHarness', () => _openHarness(ext)),
+    );
+  }
+
+  // Re-paint when the guard is toggled from settings.json rather than a command.
+  ext.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+    if (e.affectsConfiguration('copilot-adapter-kit.budget')) paint(ctx.budget.status());
+  }));
+
+  if (!ctx.budget.caps.enforce) {
+    void vscode.window.showWarningMessage(
+      '⚠️ Copilot Adapter Kit: the spend guard is OFF. Requests are uncapped and can run up unlimited provider charges.',
+      'Re-enable',
+    ).then(c => { if (c === 'Re-enable') void vscode.commands.executeCommand('copilot-adapter-kit.enableSpendGuard'); });
+  }
 
   // Register sidebar mini git panel
   ext.subscriptions.push(
@@ -351,6 +379,7 @@ async function _configure(ctx: Context): Promise<void> {
   const category = await vscode.window.showQuickPick(
     [
       { label: '⚙️  Max Output Tokens',    desc: 'Limit tokens per request',   id: 'maxTokens' },
+      { label: '🛡️  Spend Guard',          desc: 'Daily budget & loop limits',  id: 'budget' },
       { label: '📋  Log Level',            desc: 'quiet / meta / dump',         id: 'logLevel' },
       { label: '🔧  Stabilize Tools',      desc: 'Lock tool config for caching',id: 'stabilizeTools' },
       { label: '👁️  Show Built‑in Models', desc: 'Toggle built‑in model list',  id: 'showBuiltinModels' },
@@ -360,10 +389,12 @@ async function _configure(ctx: Context): Promise<void> {
   if (!category) return;
   const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
 
+  if (category.id === 'budget') { await _showUsage(ctx); return; }
+
   switch (category.id) {
     case 'maxTokens': {
       const v = await vscode.window.showInputBox({
-        prompt: 'Max output tokens per request (0 = unlimited)',
+        prompt: 'Max output tokens per request (0 = use the model maximum)',
         placeHolder: '0',
         value: String(config.get<number>('maxTokens', 0)),
         validateInput: x => /^\d+$/.test(x || '') ? undefined : 'Must be a number',
@@ -371,7 +402,7 @@ async function _configure(ctx: Context): Promise<void> {
       });
       if (v !== undefined) {
         await config.update('maxTokens', parseInt(v, 10) || 0, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`✅ Max output tokens set to ${parseInt(v, 10) || 'unlimited'}.`);
+        vscode.window.showInformationMessage(`✅ Max output tokens set to ${parseInt(v, 10) || 'the model maximum'}.`);
       }
       break;
     }
@@ -425,4 +456,181 @@ async function _configure(ctx: Context): Promise<void> {
 async function _generateCommitMessage(ext: vscode.ExtensionContext, ctx: Context): Promise<void> {
   // Open the panel — user uses the Tools tab to generate commit messages
   SettingsPanel.show(ext, ctx);
+}
+
+// ---- Spend guard: status bar, usage report, override ----
+
+function _paintStatus(item: vscode.StatusBarItem, s: BudgetStatus): void {
+  const used = s.day.inputTokens + s.day.outputTokens;
+  const cost = s.day.costUsd > 0 ? ` · $${s.day.costUsd.toFixed(2)}` : '';
+
+  if (!s.caps.enforce) {
+    // Loud and permanent: no cap is in force.
+    item.text = `$(cak-icon) $(alert) UNCAPPED ${fmtTokens(used)}${cost}`;
+    item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+    item.tooltip = _tooltip(s, 'SPEND GUARD OFF — requests are unlimited. Click for details.');
+    return;
+  }
+
+  item.text = `$(cak-icon) ${fmtTokens(used)}${cost}`;
+  item.backgroundColor = s.overLimit
+    ? new vscode.ThemeColor('statusBarItem.errorBackground')
+    : s.nearLimit
+      ? new vscode.ThemeColor('statusBarItem.warningBackground')
+      : undefined;
+  item.tooltip = _tooltip(s, s.overLimit
+    ? 'Daily budget reached — further requests are blocked.'
+    : 'Copilot Adapter Kit — usage today. Click for details.');
+}
+
+function _tooltip(s: BudgetStatus, head: string): vscode.MarkdownString {
+  const used = s.day.inputTokens + s.day.outputTokens;
+  const tokens = s.caps.dailyTokenLimit > 0
+    ? `${fmtTokens(used)} / ${fmtTokens(s.caps.dailyTokenLimit)} (${Math.round(s.tokenPct)}%)`
+    : `${fmtTokens(used)} (no limit)`;
+  const cost = s.caps.dailyCostLimitUsd > 0
+    ? `$${s.day.costUsd.toFixed(2)} / $${s.caps.dailyCostLimitUsd.toFixed(2)}`
+    : `$${s.day.costUsd.toFixed(2)} (no limit)`;
+
+  const md = new vscode.MarkdownString();
+  md.appendMarkdown(`**${head}**\n\n`);
+  md.appendMarkdown(`Today (${s.day.day})\n\n`);
+  md.appendMarkdown(`- Tokens: ${tokens}\n`);
+  md.appendMarkdown(`- Cost: ${cost}\n`);
+  md.appendMarkdown(`- Requests: ${s.day.requests}${s.day.blocked ? ` · ${s.day.blocked} blocked` : ''}\n`);
+  if (s.day.estimated) {
+    md.appendMarkdown('\n_Some figures are estimates — that provider reported no usage data._\n');
+  }
+  return md;
+}
+
+/** Kept for the notification's View Usage action, which cannot open a panel. */
+async function _showUsage(ctx: Context): Promise<void> {
+  const s = ctx.budget.status();
+  const used = s.day.inputTokens + s.day.outputTokens;
+
+  const lines = [
+    `Tokens today:   ${fmtTokens(used)}` +
+      (s.caps.dailyTokenLimit > 0
+        ? ` of ${fmtTokens(s.caps.dailyTokenLimit)} (${Math.round(s.tokenPct)}%)`
+        : '  (no limit set)'),
+    `  input:        ${fmtTokens(s.day.inputTokens)}`,
+    `  output:       ${fmtTokens(s.day.outputTokens)}`,
+    `Estimated cost: $${s.day.costUsd.toFixed(2)}` +
+      (s.caps.dailyCostLimitUsd > 0 ? ` of $${s.caps.dailyCostLimitUsd.toFixed(2)}` : '  (no limit set)'),
+    `Requests:       ${s.day.requests} sent, ${s.day.blocked} blocked`,
+    '',
+  ];
+
+  const models = Object.entries(s.day.byModel)
+    .sort((a, b) => (b[1].inputTokens + b[1].outputTokens) - (a[1].inputTokens + a[1].outputTokens))
+    .slice(0, 8);
+  if (models.length) {
+    lines.push('By model:');
+    for (const [id, m] of models) {
+      lines.push(`  ${id} — ${fmtTokens(m.inputTokens + m.outputTokens)} tok` +
+        (m.costUsd > 0 ? `, $${m.costUsd.toFixed(2)}` : '') + `, ${m.requests} req`);
+    }
+    lines.push('');
+  }
+
+  if (s.day.estimated) {
+    lines.push('Note: some figures are estimates — that provider reported no usage data.');
+  }
+  lines.push(s.caps.enforce
+    ? `Spend guard: ON — per-request input ≤ ${fmtTokens(s.caps.maxInputTokensPerRequest)}, ` +
+      `≤ ${s.caps.maxTurnsPerConversation} turns per conversation, output capped per model.`
+    : 'Spend guard: OFF — nothing is capped.');
+
+  const actions = s.caps.enforce
+    ? ['Open Spend Guard', 'Reset Usage', 'Disable Guard']
+    : ['Enable Guard', 'Open Spend Guard'];
+
+  const choice = await vscode.window.showInformationMessage(
+    `Copilot Adapter Kit — usage for ${s.day.day}`,
+    { modal: true, detail: lines.join('\n') },
+    ...actions,
+  );
+  if (choice === 'Open Spend Guard') {
+    await vscode.commands.executeCommand('copilot-adapter-kit.showUsage');
+  } else if (choice === 'Reset Usage') {
+    await _resetBudget(ctx);
+  } else if (choice === 'Disable Guard') {
+    await _setSpendGuard(ctx, false);
+  } else if (choice === 'Enable Guard') {
+    await _setSpendGuard(ctx, true);
+  }
+}
+
+async function _resetBudget(ctx: Context): Promise<void> {
+  const ok = await vscode.window.showWarningMessage(
+    'Reset the recorded usage for today to zero?',
+    { modal: true, detail: 'This clears the local counters only. Your provider has still billed what was already spent.' },
+    'Reset',
+  );
+  if (ok !== 'Reset') return;
+  await ctx.budget.reset();
+  vscode.window.showInformationMessage('✅ Usage counters reset for today.');
+}
+
+async function _setSpendGuard(ctx: Context, on: boolean): Promise<void> {
+  if (on) {
+    await ctx.budget.setEnforcement(true);
+    vscode.window.showInformationMessage('🛡️ Spend guard re-enabled. Daily limits are in force again.');
+    return;
+  }
+
+  const caps = ctx.budget.caps;
+  const detail = [
+    'Every spend protection will be removed:',
+    '',
+    `  • daily limit of ${fmtTokens(caps.dailyTokenLimit)} tokens / $${caps.dailyCostLimitUsd.toFixed(2)} — REMOVED`,
+    `  • per-request input ceiling of ${fmtTokens(caps.maxInputTokensPerRequest)} tokens — REMOVED`,
+    `  • agent loop guard at ${caps.maxTurnsPerConversation} turns per conversation — REMOVED`,
+    '',
+    'A runaway agent loop can then consume tens of millions of tokens unattended,',
+    'and your provider will bill you for all of it.',
+    '',
+    'The status bar stays red for as long as protection is off.',
+  ].join('\n');
+
+  const first = await vscode.window.showWarningMessage(
+    '⚠️ DANGER — disable the spend guard?',
+    { modal: true, detail },
+    'I accept unlimited charges',
+  );
+  if (first !== 'I accept unlimited charges') return;
+
+  const typed = await vscode.window.showInputBox({
+    prompt: 'Type DISABLE to confirm removing all spend protection',
+    placeHolder: 'DISABLE',
+    ignoreFocusOut: true,
+    validateInput: v => (!v || v === 'DISABLE') ? undefined : 'Type DISABLE exactly, or press Escape to cancel',
+  });
+  if (typed !== 'DISABLE') return;
+
+  await ctx.budget.setEnforcement(false);
+  void vscode.window.showWarningMessage(
+    '🔴 Spend guard DISABLED. Requests are now uncapped — re-enable it as soon as you are done.',
+    'Re-enable now',
+  ).then(c => { if (c === 'Re-enable now') void _setSpendGuard(ctx, true); });
+}
+
+// ---- Phase 1: webview pipeline ----
+
+/** Opens the parity harness so the built stylesheet can be checked against the mock. */
+function _openHarness(ext: vscode.ExtensionContext): void {
+  const host = new WebviewHost(ext);
+  const panel = vscode.window.createWebviewPanel(
+    'cak.harness',
+    'CAK — UI Parity Harness',
+    vscode.ViewColumn.Active,
+    host.options,
+  );
+  try {
+    panel.webview.html = host.html(panel.webview, 'harness');
+  } catch (e) {
+    panel.dispose();
+    void vscode.window.showErrorMessage((e as Error).message);
+  }
 }

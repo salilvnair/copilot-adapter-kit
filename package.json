@@ -105,6 +105,26 @@
       {
         "command": "copilot-adapter-kit.generateCommitMessage",
         "title": "%copilot-adapter-kit.command.generateCommitMessage%"
+      },
+      {
+        "command": "copilot-adapter-kit.showUsage",
+        "title": "%copilot-adapter-kit.command.showUsage%"
+      },
+      {
+        "command": "copilot-adapter-kit.resetBudget",
+        "title": "%copilot-adapter-kit.command.resetBudget%"
+      },
+      {
+        "command": "copilot-adapter-kit.disableSpendGuard",
+        "title": "%copilot-adapter-kit.command.disableSpendGuard%"
+      },
+      {
+        "command": "copilot-adapter-kit.enableSpendGuard",
+        "title": "%copilot-adapter-kit.command.enableSpendGuard%"
+      },
+      {
+        "command": "copilot-adapter-kit.openHarness",
+        "title": "%copilot-adapter-kit.command.openHarness%"
       }
     ],
     "configuration": {
@@ -132,11 +152,46 @@
               },
               "modelAlias": {
                 "type": "object",
-                "description": "Map picker model IDs \u2192 provider model names.",
+                "description": "Map picker model IDs → provider model names.",
                 "additionalProperties": true
               }
             }
           }
+        },
+        "copilot-adapter-kit.budget.enforce": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%copilot-adapter-kit.config.budget.enforce%"
+        },
+        "copilot-adapter-kit.budget.dailyTokenLimit": {
+          "type": "number",
+          "default": 2000000,
+          "minimum": 0,
+          "markdownDescription": "%copilot-adapter-kit.config.budget.dailyTokenLimit%"
+        },
+        "copilot-adapter-kit.budget.dailyCostLimitUsd": {
+          "type": "number",
+          "default": 25,
+          "minimum": 0,
+          "markdownDescription": "%copilot-adapter-kit.config.budget.dailyCostLimitUsd%"
+        },
+        "copilot-adapter-kit.budget.maxInputTokensPerRequest": {
+          "type": "number",
+          "default": 200000,
+          "minimum": 0,
+          "markdownDescription": "%copilot-adapter-kit.config.budget.maxInputTokensPerRequest%"
+        },
+        "copilot-adapter-kit.budget.maxOutputTokens": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "%copilot-adapter-kit.config.budget.maxOutputTokens%"
+        },
+        "copilot-adapter-kit.budget.maxTurnsPerConversation": {
+          "type": "number",
+          "default": 50,
+          "minimum": 0,
+          "markdownDescription": "%copilot-adapter-kit.config.budget.maxTurnsPerConversation%"
         },
         "copilot-adapter-kit.maxTokens": {
           "type": "number",
@@ -256,12 +311,25 @@
           "description": "%copilot-adapter-kit.config.maxDiffFiles%"
         }
       }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "copilot-adapter-kit.openHarness",
+          "when": "copilot-adapter-kit.dev"
+        }
+      ]
     }
   },
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('out',{recursive:true,force:true})\"",
-    "compile": "npm run clean && tsc -p ./",
-    "watch": "npm run clean && tsc -watch -p ./",
+    "compile": "npm run clean && npm run build:webview && tsc -p ./",
+    "watch": "npm run clean && npm run build:webview && tsc -watch -p ./",
+    "install:webview": "npm --prefix webview-ui install",
+    "build:webview": "npm --prefix webview-ui run build",
+    "watch:webview": "npm --prefix webview-ui run dev",
+    "typecheck": "tsc --noEmit -p ./ && npm --prefix webview-ui run typecheck",
+    "test": "npm run compile && node test/run.js",
     "logo": "node scripts/generate-icon-font.js",
     "package": "npx @vscode/vsce package",
     "publish": "npx @vscode/vsce publish",

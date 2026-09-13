@@ -7,6 +7,8 @@ export interface Payload {
   tools?: ToolDef[]; tool_choice?: 'none'|'auto'|'required';
   apiPath?: string;
   _visionFallback?: { model: string; family: string };
+  /** Catalog metadata for the spend guard. Stripped before the request is sent. */
+  _budget?: { pickerId: string; maxIn?: number; maxOut?: number; pricing?: string };
 }
 
 export interface Envelope {

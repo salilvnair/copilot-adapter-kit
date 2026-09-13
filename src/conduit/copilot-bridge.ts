@@ -5,6 +5,7 @@ import { stabilizeToolFlow } from '../crosscut/tool-stabilizer';
 import { Context } from '../kernel/context';
 import { Payload, ToolSignal } from '../mesh/contract';
 import { forgeEnvelopes, forgeTools } from '../mesh/engines/openai/openai-wire-format';
+import { tokenMath } from '../tooling/token-math';
 import { metaToVscode, resolveCatalog } from './model-catalog';
 import type { ThoughtStash } from './replay';
 import { packStash, shouldStash } from './replay';
@@ -91,6 +92,8 @@ export class CopilotBridge implements vscode.LanguageModelChatProvider {
       tool_choice: opts.tools?.length ? 'auto' : undefined,
       max_tokens: this.ctx.tuning.maxTokens,
       apiPath: meta?.apiPath || this.ctx.tuning.resolveApiPath(info.id, engineFamily),
+      // Catalog metadata for the spend guard (output ceiling + cost accounting).
+      _budget: { pickerId: info.id, maxIn: meta?.maxIn, maxOut: meta?.maxOut, pricing: meta?.pricing },
       // Audit trail: vision fallback metadata for dump logs
       ...(visionFallbackUsed ? { _visionFallback: visionFallbackUsed } : {}),
     };
@@ -119,6 +122,8 @@ export class CopilotBridge implements vscode.LanguageModelChatProvider {
         onFault: e => {
           const msg = (e as any)?.message || String(e);
           const status = (e as any)?.status;
+          // Key validity is only ever learned from a real response.
+          if (status === 401 || status === 403) this.ctx.health.recordAuthFailure(provUuid);
           const raw = (e as any)?.raw;
           const detail = raw ? `\n\n<details><summary>Details</summary>\n\n\`\`\`json\n${raw.slice(0, 500)}\n\`\`\`\n</details>` : '';
           progress.report(new vscode.LanguageModelTextPart(
@@ -126,6 +131,7 @@ export class CopilotBridge implements vscode.LanguageModelChatProvider {
           ));
         },
         onComplete: () => {
+          this.ctx.health.recordSuccess(provUuid);
           // Stash chain-of-thought for replay on next turn
           if (isThinker) {
             const stash: ThoughtStash = { chain: thoughtBuf };
@@ -244,6 +250,7 @@ export class CopilotBridge implements vscode.LanguageModelChatProvider {
       messages: forgeEnvelopes([visionMsg], true),
       stream: false,
       max_tokens: 1024,
+      _budget: { pickerId: `${family}:${modelId} (vision)` },
     };
     return this._fetchNonStreamed(engine, visionPayload, token);
   }
@@ -253,14 +260,22 @@ export class CopilotBridge implements vscode.LanguageModelChatProvider {
     payload: Payload,
     token: vscode.CancellationToken,
   ): Promise<string> {
-    return new Promise((resolve, reject) => {
+    // Vision preprocessing is billed like any other request, so it must honour
+    // cancellation — otherwise pressing Stop leaves it running and charging.
+    const ctrl = new AbortController();
+    if (token.isCancellationRequested) ctrl.abort();
+    const disp = token.onCancellationRequested(() => ctrl.abort());
+
+    return new Promise<string>((resolve, reject) => {
       let result = '';
       engine.stream(payload, {
         onToken: (t: string) => { result += t; },
+        onThinking: () => {},
+        onToolSignal: () => {},
         onComplete: () => resolve(result),
         onFault: (e: Error) => reject(e),
-      }, token.isCancellationRequested ? undefined : undefined).catch(reject);
-    });
+      }, ctrl.signal).catch(reject);
+    }).finally(() => disp.dispose());
   }
 
   /** Apply custom system prompt and/or user message template.
@@ -319,8 +334,8 @@ export class CopilotBridge implements vscode.LanguageModelChatProvider {
     text: string | vscode.LanguageModelChatRequestMessage,
     _token: vscode.CancellationToken,
   ): Promise<number> {
-    const s = typeof text === 'string' ? text
-      : (text as any).content?.map((p: any) => p.value ?? '').join('') ?? '';
-    return Math.ceil(s.length / 4.0);
+    // Deliberately conservative: undercounting here makes VS Code pack more real
+    // tokens into a request than it believes it is sending.
+    return tokenMath.estimate(text as any);
   }
 }

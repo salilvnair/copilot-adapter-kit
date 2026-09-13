@@ -1,49 +1,86 @@
-// SettingsPanel — webview panel with Daakia-styled form UI
-// Singleton panel, opens from status bar or command palette.
+// SettingsPanel — the settings surface.
+//
+// Phase 2: the document is the React bundle built from webview-ui/, served
+// through WebviewHost. This class keeps its role as the message router and the
+// only writer of settings.json — the webview posts intents and re-renders from
+// the snapshot that comes back.
 import { exec } from 'child_process';
-import { readFileSync } from 'fs';
 import { join } from 'path';
 import vscode from 'vscode';
 import { BUILTIN_CATALOG } from '../conduit/model-catalog';
 import { KNOWN_FAMILIES } from '../kernel/families';
 import { Context } from '../kernel/context';
 import type { Payload, StreamEvents } from '../mesh/contract';
+import { WebviewHost } from './webview-host';
 
 export class SettingsPanel {
   static current: SettingsPanel | undefined;
   private panel: vscode.WebviewPanel;
   private ctx: Context | undefined;
 
+  private host: WebviewHost;
+
   private constructor(private ext: vscode.ExtensionContext, ctx?: Context) {
     this.ctx = ctx;
+    this.host = new WebviewHost(ext);
     this.panel = vscode.window.createWebviewPanel(
       'cak.settingsPanel',
       'Copilot Adapter Kit',
       vscode.ViewColumn.One,
       {
-        enableScripts: true,
-        retainContextWhenHidden: true,
+        ...this.host.options,
         localResourceRoots: [
-          vscode.Uri.file(join(ext.extensionPath, 'media')),
+          ...this.host.localRoots,
           vscode.Uri.file(join(ext.extensionPath, 'resources')),
         ],
       },
     );
 
     this.panel.iconPath = vscode.Uri.file(join(ext.extensionPath, 'resources', 'icon.png'));
-    const iconUri = this.panel.webview.asWebviewUri(
-      vscode.Uri.file(join(ext.extensionPath, 'resources', 'icon.png'))
-    );
-    const csp = `default-src 'none'; img-src ${this.panel.webview.cspSource} data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:;`;
-    this.panel.webview.html = this._html()
-      .replace('__CSP__', csp)
-      .replace('__ICON_URI__', iconUri.toString());
+    try {
+      this.panel.webview.html = this.host.html(this.panel.webview, 'settings');
+    } catch (e) {
+      this.panel.webview.html = _buildMissing((e as Error).message);
+    }
     this.panel.onDidDispose(() => { SettingsPanel.current = undefined; });
+
+    // Reachability is checked when the panel opens, never with a key attached.
+    void this._probeAll();
 
     // Handle messages from webview
     this.panel.webview.onDidReceiveMessage(async (msg: { type: string; payload?: any }) => {
+      try {
+        await this._route(msg);
+      } catch (e) {
+        // A handler that throws used to leave the UI looking like the click did
+        // nothing at all. Say so instead.
+        const message = (e as Error)?.message ?? String(e);
+        void vscode.window.showErrorMessage(`Copilot Adapter Kit: ${message}`);
+        void this.panel.webview.postMessage({ type: 'actionFailed', payload: { type: msg.type, message } });
+      }
+    });
+  }
+
+  private async _route(msg: { type: string; payload?: any }): Promise<void> {
+    {
       switch (msg.type) {
         case 'getState':
+          await this._sendState();
+          break;
+        case 'testProvider':
+          await this._probeAll(msg.payload?.uuid);
+          break;
+        case 'openSpendGuard':
+          await vscode.commands.executeCommand('copilot-adapter-kit.showUsage');
+          break;
+        case 'setBudgetGuard':
+          await vscode.commands.executeCommand(msg.payload?.on
+            ? 'copilot-adapter-kit.enableSpendGuard'
+            : 'copilot-adapter-kit.disableSpendGuard');
+          await this._sendState();
+          break;
+        case 'resetBudget':
+          await vscode.commands.executeCommand('copilot-adapter-kit.resetBudget');
           await this._sendState();
           break;
         case 'setApiKey':
@@ -109,6 +146,12 @@ export class SettingsPanel {
         case 'deleteAll':
           await this._deleteAll();
           break;
+        case 'clearAllKeys':
+          await this._clearAllKeys();
+          break;
+        case 'resetSettings':
+          await this._resetSettings();
+          break;
         case 'factoryReset':
           await this._factoryReset();
           break;
@@ -122,7 +165,7 @@ export class SettingsPanel {
           await this._genCommitMsg(msg.payload?.diff, msg.payload?.family);
           break;
       }
-    });
+    }
   }
 
   static show(ext: vscode.ExtensionContext, ctx?: Context): void {
@@ -133,15 +176,6 @@ export class SettingsPanel {
     }
   }
 
-  private _html(): string {
-    try {
-      const p = join(this.ext.extensionPath, 'media', 'settings-panel.html');
-      return readFileSync(p, 'utf-8');
-    } catch {
-      return `<html><body style="color:#d4d4d4;background:#1e1e1e;padding:24px;">
-        <h2>Panel not found</h2><p>Run <code>npm run compile</code> and reload.</p></body></html>`;
-    }
-  }
 
   private async _sendState(): Promise<void> {
     const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
@@ -159,6 +193,16 @@ export class SettingsPanel {
     const userPromptTemplate: string = config.get<string>('userPromptTemplate', '');
     const gitPrompt: string = config.get<string>('gitPrompt', '');
     const maxDiffFiles: number = config.get<number>('maxDiffFiles', 500);
+    const budget = this.ctx
+      ? (() => {
+          const st = this.ctx!.budget.status();
+          return {
+            caps: st.caps, day: st.day,
+            tokenPct: st.tokenPct, costPct: st.costPct,
+            overLimit: st.overLimit, nearLimit: st.nearLimit,
+          };
+        })()
+      : undefined;
 
     // Merge overrides into built-in models
     const builtinModels = BUILTIN_CATALOG.map(m => {
@@ -196,11 +240,64 @@ export class SettingsPanel {
       type: 'state',
       payload: {
         providers, models, maxTokens, logLevel, stabilizeTools, hiddenBuiltins, hiddenCustomModels, modelOverrides, keys,
-        visionFallbackModel, visionFallbackAlways, systemPrompt, userPromptTemplate, gitPrompt, maxDiffFiles,
+        visionFallbackModel, visionFallbackAlways, systemPrompt, userPromptTemplate, gitPrompt, maxDiffFiles, budget,
+        // The manifest is the single source of the version — it used to be
+        // hard-coded in the markup and read "v0.1" three releases late.
+        version: this.ext.extension.packageJSON.version as string,
+        health: this.ctx?.health.all ?? {},
         builtinModels, copilotModels,
         engineFamilies: KNOWN_FAMILIES.map(f => ({ family: f.family, label: f.label, defaultUrl: f.defaultUrl, desc: f.desc })),
       },
     });
+  }
+
+  /** Remove every stored key. Providers stay; their models leave the picker. */
+  private async _clearAllKeys(): Promise<void> {
+    const providers = vscode.workspace.getConfiguration('copilot-adapter-kit')
+      .get<Record<string, any>>('providers') || {};
+    for (const uuid of Object.keys(providers)) {
+      await this.ext.secrets.delete(`copilot-adapter-kit.apiKey.${uuid}`);
+    }
+    this.ctx?.bridge.signal();
+    await this._sendState();
+  }
+
+  /** Put every setting back to its shipped default, keys and providers aside. */
+  private async _resetSettings(): Promise<void> {
+    const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
+    const keys = [
+      'maxTokens', 'logLevel', 'stabilizeTools', 'maxDiffFiles',
+      'systemPrompt', 'userPromptTemplate', 'gitPrompt',
+      'visionFallbackModel', 'visionFallbackAlways',
+      'budget.enforce', 'budget.dailyTokenLimit', 'budget.dailyCostLimitUsd',
+      'budget.maxInputTokensPerRequest', 'budget.maxOutputTokens', 'budget.maxTurnsPerConversation',
+    ];
+    for (const k of keys) {
+      await config.update(k, undefined, vscode.ConfigurationTarget.Global);
+    }
+    await this._sendState();
+  }
+
+  /**
+   * Check reachability and push the result. One provider when given a uuid,
+   * otherwise every configured provider plus the local Ollama port, which the
+   * first-run screen offers when something answers there.
+   */
+  private async _probeAll(uuid?: string): Promise<void> {
+    if (!this.ctx) return;
+    const providers = vscode.workspace.getConfiguration('copilot-adapter-kit')
+      .get<Record<string, any>>('providers') || {};
+
+    if (uuid) {
+      const p = providers[uuid];
+      if (p?.baseUrl) await this.ctx.health.probe(uuid, p.baseUrl);
+    } else {
+      await Promise.all([
+        this.ctx.health.probeAll(providers),
+        Object.keys(providers).length === 0 ? this.ctx.health.probeOllama() : Promise.resolve(),
+      ]);
+    }
+    await this._sendState();
   }
 
   private async _setApiKey(uuid: string, key: string): Promise<void> {
@@ -766,4 +863,13 @@ Generate only the commit message, nothing else.`;
       });
     }
   }
+}
+
+/** Shown when the webview bundle has not been built. */
+function _buildMissing(message: string): string {
+  return `<!doctype html><html><body style="font-family:system-ui;background:#1e1e1e;color:#d4d4d4;padding:28px">
+<h2 style="font-weight:600;margin:0 0 10px">Webview bundle missing</h2>
+<p style="color:#a9a9a9;margin:0 0 14px">${message}</p>
+<pre style="background:#181818;border:1px solid #414141;border-radius:8px;padding:12px">npm run compile</pre>
+</body></html>`;
 }

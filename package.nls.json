@@ -12,7 +12,7 @@
   "copilot-adapter-kit.command.showLogs": "Copilot Adapter Kit: Show Logs",
   "copilot-adapter-kit.command.openDumps": "Copilot Adapter Kit: Open Request Dumps",
   "copilot-adapter-kit.config.title": "Copilot Adapter Kit (CAK)",
-  "copilot-adapter-kit.config.maxTokens": "Max output tokens per request. 0 = unlimited.",
+  "copilot-adapter-kit.config.maxTokens": "Max output tokens per request. `0` uses the model’s declared maximum. The Spend Guard always applies its own ceiling on top of this — output is never unbounded.",
   "copilot-adapter-kit.config.stabilizeTools": "Experimental: lock tool configurations to improve cache hit rates. Pre-activates all available VS Code tools so the tools array stays identical across turns — each subsequent request reuses cached context. \n\n⚠️ Requests include more function definitions — input tokens increase. Cached tokens are cheaper but still count toward usage. \n\n- 64 or fewer enabled tools: usually stable — leave this off. \n- More than 128 tools: not supported. Disable unused tools. \n- May inject internal activation calls into chat history. Start a new chat if switching models behaves unexpectedly. \n\nUse Configure Tools (workbench.action.chat.configureTools) to manage your tool list.",
   "copilot-adapter-kit.config.logLevel": "quiet = token counts | meta = hashes + cache trace | dump = full request payloads",
   "copilot-adapter-kit.config.visionFallbackModel": "Model ID to use for vision/image description when the selected model doesn't support images. Leave empty to disable. Format: family:modelId (e.g. openai:gpt-5.2) or just modelId.",
@@ -23,7 +23,17 @@
   "copilot-adapter-kit.config.maxDiffFiles": "Max number of changed files before diff is compressed to --stat/--numstat summary (avoids LLM context window limits). Default: 500.",
   "copilot-adapter-kit.command.generateCommitMessage": "Copilot Adapter Kit: Generate Git Commit Message",
   "copilot-adapter-kit.config.models": "Add custom models. Each entry needs id and family. Matches providers by family name.",
-
   "copilot-adapter-kit.config.hiddenBuiltins": "Specific built-in model IDs to hide from the picker. Use the Open Panel UI to manage this visually.",
-  "copilot-adapter-kit.config.modelOverrides": "Per-model overrides (name, maxIn, maxOut, etc.) for built-in models. Managed via the panel UI."
+  "copilot-adapter-kit.config.modelOverrides": "Per-model overrides (name, maxIn, maxOut, etc.) for built-in models. Managed via the panel UI.",
+  "copilot-adapter-kit.command.showUsage": "Copilot Adapter Kit: Show Token Usage",
+  "copilot-adapter-kit.command.resetBudget": "Copilot Adapter Kit: Reset Today's Usage",
+  "copilot-adapter-kit.command.disableSpendGuard": "Copilot Adapter Kit: Disable Spend Guard (Dangerous)",
+  "copilot-adapter-kit.command.enableSpendGuard": "Copilot Adapter Kit: Enable Spend Guard",
+  "copilot-adapter-kit.config.budget.enforce": "**Spend guard.** When on (default), requests that would exceed the limits below are blocked before they are sent. Turning this off removes ALL spend protection — an agent loop can then run unbounded.",
+  "copilot-adapter-kit.config.budget.dailyTokenLimit": "Maximum total tokens (input + output) per calendar day, across all providers. `0` disables the token limit.",
+  "copilot-adapter-kit.config.budget.dailyCostLimitUsd": "Maximum estimated spend in USD per calendar day, computed from each model’s configured pricing. Models without pricing contribute $0. `0` disables the cost limit.",
+  "copilot-adapter-kit.config.budget.maxInputTokensPerRequest": "Reject any single request whose estimated input exceeds this many tokens. `0` disables the check.",
+  "copilot-adapter-kit.config.budget.maxOutputTokens": "Hard ceiling on `max_tokens` for every request. `0` uses the model’s declared max output (never unlimited).",
+  "copilot-adapter-kit.config.budget.maxTurnsPerConversation": "Agent loop guard — maximum requests for one conversation before further turns are refused. `0` disables the guard.",
+  "copilot-adapter-kit.command.openHarness": "Copilot Adapter Kit: Open UI Parity Harness"
 }
