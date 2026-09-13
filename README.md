@@ -211,7 +211,7 @@ behaviour-heavy widgets. Three entries build into `media/dist/`, one per surface
 | `npm run watch:webview` | Vite dev server with hot reload, for working on a screen |
 | `npm run compile` | Webview build + `tsc` — what F5 and packaging use |
 | `npm run typecheck` | Type-checks the extension and the webview |
-| `npm test` | Compiles, then runs the spend-guard and webview-host suites |
+| `npm test` | Compiles, then runs the spend-guard, webview-host and message-contract suites |
 
 Every surface is built: the settings shell with Providers, Models and API Keys; the
 Spend Guard dashboard and its history; Configuration, Git Tools, JSON, Request Dumps,
@@ -227,6 +227,10 @@ in `src/icons.tsx` replaces them.
 
 Run **Copilot Adapter Kit: Open UI Parity Harness** from an Extension Development Host to
 render every primitive side by side against the mock. It is registered only in development.
+
+`test/message-contract.test.js` checks that every message the UI can post has a handler
+on the extension side, and that no action or handler has gone stale. That is the failure
+the tests exist to prevent: a control that looks fine and silently does nothing.
 
 `npm run watch:webview` serves the screens in a plain browser for design work. With no
 extension host to answer, they fall back to sample data from `src/app/fixture.ts` — every

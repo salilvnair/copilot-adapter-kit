@@ -4,7 +4,7 @@ const { spawnSync } = require('child_process');
 const { join, resolve } = require('path');
 
 const ROOT = resolve(__dirname, '..');
-const SUITES = ['spend-guard.test.js', 'webview-host.test.js'];
+const SUITES = ['spend-guard.test.js', 'webview-host.test.js', 'message-contract.test.js'];
 
 let failed = 0;
 for (const suite of SUITES) {

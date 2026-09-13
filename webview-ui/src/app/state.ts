@@ -158,7 +158,6 @@ export const actions = {
   testAllProviders: () => post('testProvider', {}),
   setApiKey: (uuid: string, key: string) => post('setApiKey', { uuid, key }),
   clearApiKey: (uuid: string) => post('clearApiKey', { uuid }),
-  promptForKey: (uuid: string) => post('promptForKey', { uuid }),
   saveModel: (entry: ModelCfg & { parentUuid: string }) => post('saveModel', entry),
   removeModel: (parentUuid: string, uuid: string) => post('removeModel', { parentUuid, uuid }),
   toggleModelVisible: (id: string, family: string) => post('toggleCustom', { id, family }),
