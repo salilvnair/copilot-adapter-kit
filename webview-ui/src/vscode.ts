@@ -53,6 +53,14 @@ export function syncTheme(): void {
     const light = document.body.classList.contains('vscode-light')
       || document.body.classList.contains('vscode-high-contrast-light');
     document.body.classList.toggle('is-light', light);
+
+    // Also on the root element. dui declares aliases such as
+    // `--color-btn-secondary-bg: var(--color-surface-hover)` on :root, and a
+    // custom property resolves where it is declared — so with the theme class
+    // only on <body>, those aliases kept their dark values while everything
+    // around them went light.
+    document.documentElement.classList.toggle('vscode-light', light);
+    document.documentElement.classList.toggle('is-light', light);
   };
   apply();
   new MutationObserver(apply).observe(document.body, { attributes: true, attributeFilter: ['class'] });

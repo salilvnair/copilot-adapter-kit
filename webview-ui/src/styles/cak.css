@@ -569,3 +569,22 @@ body.dui{margin:0;background:var(--c-panel)}
 .dui.is-light .f-new{color:var(--c-primary)}
 .dui .seg-ctl.ml-auto{margin-left:auto}
 .dui .sidebar{height:100%}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Secondary and ghost buttons take their surface from our own tokens.
+ *
+ * dui's secondary background is an alias of an alias declared on :root, and it
+ * did not follow the editor theme — a light panel rendered black blocks where
+ * "Add key" and "Retry" should be. Primary and danger are fine: they resolve
+ * straight from --color-primary and --color-error.
+ * ───────────────────────────────────────────────────────────────────────────── */
+.dui .dui_button--secondary{
+  background:var(--c-elevated);
+  border-color:var(--c-surface-border);
+  color:var(--c-text);
+}
+.dui .dui_button--secondary:not(:disabled):hover{background:var(--c-surface-hover)}
+.dui .dui_button--ghost{background:transparent;color:var(--c-text)}
+.dui .dui_button--ghost:not(:disabled):hover{background:var(--c-surface-hover)}
+.dui .dui_icon-button{color:var(--c-text-2)}
+.dui .dui_icon-button:not(:disabled):hover{background:var(--c-surface-hover);color:var(--c-text)}
