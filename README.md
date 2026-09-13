@@ -197,6 +197,11 @@ When you see "tool list is unstable" warnings, enable `stabilizeTools` in the Co
 
 ---
 
+## Screens
+
+Every screen, tab and overlay is captured in [`docs/screenshots/`](docs/screenshots) —
+regenerate the set with `node scripts/screenshots.mjs`.
+
 ## Webview UI
 
 The panels are built from `webview-ui/` — React 19 + Vite 6 + Tailwind 4, with

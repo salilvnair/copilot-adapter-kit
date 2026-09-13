@@ -3,6 +3,7 @@ node_modules/**
 src/**
 webview-ui/**
 scripts/**
+docs/**
 test/**
 .git/**
 .gitignore
