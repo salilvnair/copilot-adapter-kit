@@ -213,7 +213,7 @@ behaviour-heavy widgets. Three entries build into `media/dist/`, one per surface
 | `npm run typecheck` | Type-checks the extension and the webview |
 | `npm test` | Compiles, then runs the spend-guard, webview-host and message-contract suites |
 | `npm run test:e2e` | Playwright drives every screen in a real browser |
-| `npm run test:all` | Both of the above — what CI runs |
+| `npm run test:all` | Both of the above |
 
 Every surface is built: the settings shell with Providers, Models and API Keys; the
 Spend Guard dashboard and its history; Configuration, Git Tools, JSON, Request Dumps,
@@ -229,6 +229,9 @@ in `src/icons.tsx` replaces them.
 
 Run **Copilot Adapter Kit: Open UI Parity Harness** from an Extension Development Host to
 render every primitive side by side against the mock. It is registered only in development.
+
+**Tests run locally, not in CI.** Nothing here is wired to GitHub Actions — the only
+workflow is the publish job on a `v*` tag. Run `npm run test:all` before pushing.
 
 `webview-ui/e2e/` drives the real screens in Chromium against the Vite dev server: filters
 narrow lists, menu entries fire, a destructive action asks before it acts, a hold has to be
