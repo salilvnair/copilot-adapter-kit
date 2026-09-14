@@ -1,6 +1,9 @@
 .vscode/**
 node_modules/**
+out/**
 src/**
+esbuild.js
+**/*.map
 webview-ui/**
 scripts/**
 docs/**

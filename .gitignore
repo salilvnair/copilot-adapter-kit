@@ -67,3 +67,4 @@ webview-ui/test-results/
 webview-ui/playwright-report/
 webview-ui/blob-report/
 webview-ui/.playwright/
+media/sql-wasm.wasm

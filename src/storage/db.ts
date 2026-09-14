@@ -33,8 +33,9 @@ export async function initDb(extensionPath: string): Promise<void> {
   try {
     fs.mkdirSync(path.dirname(_dbPath), { recursive: true });
 
-    // The WASM binary is copied beside the bundles by `npm run copy:wasm`.
-    const wasmPath = path.join(extensionPath, 'media', 'sql-wasm.wasm');
+    // Load sql.js with the WASM binary from the extension's dist folder, put
+    // there by esbuild.js. The loader itself is bundled into dist/extension.js.
+    const wasmPath = path.join(extensionPath, 'dist', 'sql-wasm.wasm');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const initSqlJs = require('sql.js') as typeof import('sql.js').default;
 

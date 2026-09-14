@@ -170,8 +170,14 @@ export function useAppState(): AppState | undefined {
   const [state, setState] = useState<AppState | undefined>(undefined);
 
   useEffect(() => {
+    // The fixture is a fallback, not an override: if anything answers, what it
+    // sent is what renders. Without this the mock data won every race, which
+    // made the empty-ledger path impossible to exercise outside VS Code.
+    let answered = false;
+
     const off = onMessage(msg => {
       if (msg.type === 'state') {
+        answered = true;
         const p = msg.payload as Partial<AppState>;
         setState({ ...EMPTY, ...p, usageByModel: p.budget?.day.byModel ?? {} });
       }
@@ -181,8 +187,10 @@ export function useAppState(): AppState | undefined {
     // Outside VS Code there is no host to answer, so a screen would render
     // empty. In dev, fall back to the mock's own data after a beat.
     if (import.meta.env.DEV && !vscode()) {
-      void import('./fixture').then(({ FIXTURE }) =>
-        setState({ ...FIXTURE, isSample: true, usageByModel: FIXTURE.budget?.day.byModel ?? {} }));
+      void import('./fixture').then(({ FIXTURE }) => {
+        if (answered) return;
+        setState({ ...FIXTURE, isSample: true, usageByModel: FIXTURE.budget?.day.byModel ?? {} });
+      });
     }
 
     return off;

@@ -3,7 +3,7 @@
   "displayName": "Copilot Adapter Kit",
   "description": "Plugin-based provider mesh for Copilot Chat. BYOK, zero config.",
   "icon": "resources/icon.png",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "publisher": "salilvnair",
   "license": "MIT",
   "author": "salilvnair",
@@ -22,7 +22,7 @@
   "activationEvents": [
     "onStartupFinished"
   ],
-  "main": "./out/entry.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "icons": {
       "cak-icon": {
@@ -348,13 +348,14 @@
     }
   },
   "scripts": {
-    "clean": "node -e \"require('node:fs').rmSync('out',{recursive:true,force:true})\"",
-    "compile": "npm run clean && npm run build:webview && npm run copy:wasm && tsc -p ./",
-    "watch": "npm run clean && npm run build:webview && npm run copy:wasm && tsc -watch -p ./",
+    "clean": "node -e \"require('node:fs').rmSync('out',{recursive:true,force:true});require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "vscode:prepublish": "npm run compile",
+    "compile": "npm run clean && npm run build:webview && npm run build:ext && tsc -p ./",
+    "build:ext": "node esbuild.js --production",
+    "watch": "npm run clean && npm run build:webview && npm run build:ext && tsc -watch -p ./",
     "install:webview": "npm --prefix webview-ui install",
     "build:webview": "npm --prefix webview-ui run build",
     "watch:webview": "npm --prefix webview-ui run dev",
-    "copy:wasm": "node -e \"require('node:fs').copyFileSync(require.resolve('sql.js/dist/sql-wasm.wasm'),'media/sql-wasm.wasm')\"",
     "typecheck": "tsc --noEmit -p ./ && npm --prefix webview-ui run typecheck",
     "test": "npm run compile && node test/run.js",
     "test:e2e": "npm --prefix webview-ui run test:e2e",
@@ -371,6 +372,7 @@
     "@types/sql.js": "^1.4.11",
     "@types/vscode": "^1.116.0",
     "@vscode/vsce": "^3.9.1",
+    "esbuild": "^0.28.2",
     "svg2ttf": "^6.1.0",
     "svgicons2svgfont": "^16.0.0",
     "ttf2woff": "^3.0.0",

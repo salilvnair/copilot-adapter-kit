@@ -443,19 +443,37 @@ function _level(tokens: number, max: number): string {
   return 'h1';
 }
 
+/** A stored number, or 0 — never NaN, Infinity or undefined. */
+function _n(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
+
 interface Day { day: string; tokens: number; costUsd: number; requests: number; blocked: number; capped: boolean }
 
 /** 98 cells ending today, padded so each column is one week (Sunday first). */
 function _calendar(b: BudgetSnapshot): (Day | null)[] {
   const byDay = new Map<string, Day>();
-  for (const d of b.history) byDay.set(d.day, d);
+  // History is read back from globalState, so a day filed by an older build can
+  // be missing whatever fields did not exist then. One coercion here covers the
+  // whole view: every cell below reads these objects and nothing else.
+  for (const d of b.history ?? []) {
+    if (!d || typeof d.day !== 'string') continue;
+    byDay.set(d.day, {
+      day: d.day,
+      tokens: _n(d.tokens),
+      costUsd: _n(d.costUsd),
+      requests: _n(d.requests),
+      blocked: _n(d.blocked),
+      capped: d.capped === true,
+    });
+  }
   byDay.set(b.day.day, {
     day: b.day.day,
-    tokens: b.day.inputTokens + b.day.outputTokens,
-    costUsd: b.day.costUsd,
-    requests: b.day.requests,
-    blocked: b.day.blocked,
-    capped: b.overLimit,
+    tokens: _n(b.day.inputTokens) + _n(b.day.outputTokens),
+    costUsd: _n(b.day.costUsd),
+    requests: _n(b.day.requests),
+    blocked: _n(b.day.blocked),
+    capped: b.overLimit === true,
   });
 
   const out: (Day | null)[] = [];

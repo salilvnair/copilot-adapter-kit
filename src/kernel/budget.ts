@@ -104,7 +104,7 @@ export class BudgetLedger {
 
   constructor(private ext: vscode.ExtensionContext) {
     const stored = ext.globalState.get<LedgerDay>(LEDGER_KEY);
-    this.history = ext.globalState.get<DaySummary[]>(HISTORY_KEY) ?? [];
+    this.history = _normaliseHistory(ext.globalState.get<DaySummary[]>(HISTORY_KEY));
     if (stored && stored.day === _today()) {
       this.day = _normalise(stored);
     } else {
@@ -337,6 +337,34 @@ function _emptyDay(): LedgerDay {
     estimated: false, byModel: {},
     hourly: new Array(24).fill(0), hourlyCost: new Array(24).fill(0), refusals: [],
   };
+}
+
+/**
+ * History as it comes back out of globalState, which is whatever an older build
+ * wrote rather than whatever the current DaySummary says.
+ *
+ * globalState is never migrated, so a day filed before a field existed comes
+ * back without it. The panel then called .toFixed on undefined and the whole
+ * view unmounted — a black tab, with the cause three releases in the past.
+ * Anything unreadable is dropped rather than guessed at.
+ */
+function _normaliseHistory(stored: unknown): DaySummary[] {
+  if (!Array.isArray(stored)) return [];
+  return stored
+    .filter((d): d is Partial<DaySummary> => !!d && typeof (d as DaySummary).day === 'string')
+    .map(d => ({
+      day: d.day as string,
+      tokens: _num(d.tokens),
+      costUsd: _num(d.costUsd),
+      requests: _num(d.requests),
+      blocked: _num(d.blocked),
+      capped: d.capped === true,
+    }));
+}
+
+/** A stored number, or 0 — never NaN, Infinity or undefined. */
+function _num(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
 }
 
 function _normalise(d: Partial<LedgerDay>): LedgerDay {
