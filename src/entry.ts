@@ -2,6 +2,7 @@
 import vscode from 'vscode';
 import { fmtTokens, type BudgetStatus } from './kernel/budget';
 import { Context } from './kernel/context';
+import { defaultUrlFor, KNOWN_FAMILIES } from './kernel/families';
 import { paintStatus } from './panel/status-bar';
 import { showStatusMenu } from './panel/status-menu';
 import { closeDb, initDb, insertUiAudit, pruneAudit } from './storage/db';
@@ -33,25 +34,25 @@ export async function activate(ext: vscode.ExtensionContext): Promise<void> {
   ext.subscriptions.push(status, ctx.budget.onChange(paint));
 
   ext.subscriptions.push(
-    vscode.commands.registerCommand('copilot-adapter-kit.openPanel',     () => SettingsPanel.show(ext, ctx)),
-    vscode.commands.registerCommand('copilot-adapter-kit.setApiKey',     () => _promptKey(ctx)),
-    vscode.commands.registerCommand('copilot-adapter-kit.clearApiKey',   () => _clearKey(ctx)),
-    vscode.commands.registerCommand('copilot-adapter-kit.addModel',      () => _addModel(ctx)),
-    vscode.commands.registerCommand('copilot-adapter-kit.removeModel',   () => _removeModel(ctx)),
-    vscode.commands.registerCommand('copilot-adapter-kit.addProvider',   () => _addProvider(ctx)),
-    vscode.commands.registerCommand('copilot-adapter-kit.removeProvider',() => _removeProvider(ctx)),
-    vscode.commands.registerCommand('copilot-adapter-kit.configure',     () => _configure(ctx)),
-    vscode.commands.registerCommand('copilot-adapter-kit.openSettings',  () =>
+    _command(ctx, 'copilot-adapter-kit.openPanel',     () => SettingsPanel.show(ext, ctx)),
+    _command(ctx, 'copilot-adapter-kit.setApiKey',     () => _promptKey(ctx)),
+    _command(ctx, 'copilot-adapter-kit.clearApiKey',   () => _clearKey(ctx)),
+    _command(ctx, 'copilot-adapter-kit.addModel',      () => _addModel(ctx)),
+    _command(ctx, 'copilot-adapter-kit.removeModel',   () => _removeModel(ctx)),
+    _command(ctx, 'copilot-adapter-kit.addProvider',   () => _addProvider(ctx)),
+    _command(ctx, 'copilot-adapter-kit.removeProvider',() => _removeProvider(ctx)),
+    _command(ctx, 'copilot-adapter-kit.configure',     () => _configure(ctx)),
+    _command(ctx, 'copilot-adapter-kit.openSettings',  () =>
       vscode.commands.executeCommand('workbench.action.openSettings', '@ext:salilvnair.copilot-adapter-kit')),
-    vscode.commands.registerCommand('copilot-adapter-kit.showLogs',      () =>
+    _command(ctx, 'copilot-adapter-kit.showLogs',      () =>
       (vscode.window as any).showOutputChannel?.() || ctx.tracer.info('')),
-    vscode.commands.registerCommand('copilot-adapter-kit.openDumps',     () => ctx.tracer.openDumpsFolder()),
-    vscode.commands.registerCommand('copilot-adapter-kit.generateCommitMessage', () => _generateCommitMessage(ext, ctx)),
-    vscode.commands.registerCommand('copilot-adapter-kit.statusMenu',         () => showStatusMenu(ctx)),
-    vscode.commands.registerCommand('copilot-adapter-kit.showUsage',          () => SpendGuardPanel.show(ext, ctx)),
-    vscode.commands.registerCommand('copilot-adapter-kit.resetBudget',        () => _resetBudget(ctx)),
-    vscode.commands.registerCommand('copilot-adapter-kit.disableSpendGuard',  () => _setSpendGuard(ctx, false)),
-    vscode.commands.registerCommand('copilot-adapter-kit.enableSpendGuard',   () => _setSpendGuard(ctx, true)),
+    _command(ctx, 'copilot-adapter-kit.openDumps',     () => ctx.tracer.openDumpsFolder()),
+    _command(ctx, 'copilot-adapter-kit.generateCommitMessage', () => _generateCommitMessage(ext, ctx)),
+    _command(ctx, 'copilot-adapter-kit.statusMenu',         () => showStatusMenu(ctx)),
+    _command(ctx, 'copilot-adapter-kit.showUsage',          () => SpendGuardPanel.show(ext, ctx)),
+    _command(ctx, 'copilot-adapter-kit.resetBudget',        () => _resetBudget(ctx)),
+    _command(ctx, 'copilot-adapter-kit.disableSpendGuard',  () => _setSpendGuard(ctx, false)),
+    _command(ctx, 'copilot-adapter-kit.enableSpendGuard',   () => _setSpendGuard(ctx, true)),
   );
 
   // Development only — the parity harness is for checking the UI against the
@@ -160,6 +161,35 @@ const TOOL_SIZES = [
   { label: '128',   value: 128 },
 ];
 
+/**
+ * Register a command so a failure says which one failed and leaves a stack.
+ *
+ * A raw "Cannot read properties of undefined (reading 'family')" in a toast
+ * names no command, no file and no line, which makes it unreportable and
+ * unfixable. The notification now names the command and offers the log; the
+ * output channel gets the stack.
+ */
+function _command(
+  ctx: Context, id: string, run: () => unknown,
+): vscode.Disposable {
+  return vscode.commands.registerCommand(id, async () => {
+    try {
+      return await run();
+    } catch (e) {
+      const err = e as Error;
+      const short = id.replace('copilot-adapter-kit.', '');
+      ctx.tracer.info(`[command ${short}] ${err?.stack ?? err?.message ?? String(e)}`);
+      const choice = await vscode.window.showErrorMessage(
+        `Copilot Adapter Kit: "${short}" failed — ${err?.message ?? String(e)}`,
+        'Show log', 'Open Settings',
+      );
+      if (choice === 'Show log') await vscode.commands.executeCommand('copilot-adapter-kit.showLogs');
+      if (choice === 'Open Settings') await vscode.commands.executeCommand('copilot-adapter-kit.openPanel');
+      return undefined;
+    }
+  });
+}
+
 async function _addModel(ctx: Context): Promise<void> {
   const form: Partial<ModelFormData> = {};
 
@@ -173,20 +203,35 @@ async function _addModel(ctx: Context): Promise<void> {
   if (!id) return;
   form.id = id.trim();
 
-  // Step 2 — Provider family
-  const families = ctx.discovery.families();
-  const family = families.length === 1
-    ? families[0]
-    : await vscode.window.showQuickPick(families.map(f => ({ label: f, value: f })), {
-        placeHolder: '2/8 — Select provider family',
-        ignoreFocusOut: true,
-      });
-  if (!family) return;
-  form.family = typeof family === 'string' ? family : family.value;
-  // If user typed custom family, use it
-  if (typeof family !== 'string' && family.label !== family.value) {
-    form.family = family.value;
+  // Step 2 — Which provider this model belongs to.
+  //
+  // It used to offer engine families instead, which meant a model could be
+  // filed under a family with no provider behind it — it then never appeared
+  // in the picker and nothing said why.
+  const configured = Object.entries(ctx.tuning.providers);
+  if (configured.length === 0) {
+    const go = await vscode.window.showWarningMessage(
+      'No providers are configured, so there is nothing to add a model to.',
+      'Add a provider',
+    );
+    if (go) await vscode.commands.executeCommand('copilot-adapter-kit.addProvider');
+    return;
   }
+  const provPick = configured.length === 1
+    ? { value: configured[0][0], family: configured[0][1].family ?? '' }
+    : await vscode.window.showQuickPick(
+        configured.map(([uuid, p]) => ({
+          label: p.name || p.family || uuid,
+          description: p.family ?? '',
+          detail: p.baseUrl,
+          value: uuid,
+          family: p.family ?? '',
+        })),
+        { placeHolder: '2/8 — Which provider serves this model?', ignoreFocusOut: true },
+      );
+  if (!provPick) return;
+  form.family = provPick.family;
+  const parentUuid = provPick.value;
 
   // Step 3 — Display name
   const name = await vscode.window.showInputBox({
@@ -274,19 +319,24 @@ async function _addModel(ctx: Context): Promise<void> {
     toolCalling: form.toolCalling,
   };
 
-  // Write into settings
+  // Models are a map of provider UUID -> models, which is what model-catalog
+  // reads. This wrote a flat array, and loadUserModels drops anything that is
+  // an array outright — so every model added here was invisible.
   const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
-  const existing = config.get<unknown[]>('models') || [];
-  // Replace if same id+family exists, otherwise append
-  const idx = existing.findIndex((m: any) => m?.id === form.id && m?.family === form.family);
-  if (idx >= 0) { existing[idx] = entry; }
-  else { existing.push(entry); }
-  await config.update('models', existing, vscode.ConfigurationTarget.Global);
+  const raw = config.get<unknown>('models');
+  const map: Record<string, any[]> = (raw && typeof raw === 'object' && !Array.isArray(raw))
+    ? { ...(raw as Record<string, any[]>) }
+    : {};
+  const arr = Array.isArray(map[parentUuid]) ? [...map[parentUuid]] : [];
+  const idx = arr.findIndex((m: any) => m?.id === form.id);
+  if (idx >= 0) arr[idx] = { ...arr[idx], ...entry };
+  else arr.push(entry);
+  map[parentUuid] = arr;
+  await config.update('models', map, vscode.ConfigurationTarget.Global);
 
   ctx.bridge.signal();
   vscode.window.showInformationMessage(
-    `✅ Model "${form.name}" (${form.id}) added to ${form.family}. ` +
-    'Open Copilot Chat to select it.'
+    `Model "${form.name}" (${form.id}) added. Open Copilot Chat to select it.`
   );
 }
 
@@ -294,40 +344,55 @@ async function _addModel(ctx: Context): Promise<void> {
 
 async function _removeModel(ctx: Context): Promise<void> {
   const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
-  const existing = (config.get<unknown[]>('models') || []) as Array<{ id: string; name: string; family: string }>;
-  if (!existing.length) {
-    vscode.window.showInformationMessage('No custom models to remove. Built‑in models cannot be removed.');
+  // Same map shape _addModel now writes: provider UUID -> that provider's models.
+  const raw = config.get<unknown>('models');
+  const map: Record<string, any[]> = (raw && typeof raw === 'object' && !Array.isArray(raw))
+    ? { ...(raw as Record<string, any[]>) }
+    : {};
+
+  const providers = ctx.tuning.providers;
+  const rows = Object.entries(map).flatMap(([parentUuid, arr]) =>
+    (Array.isArray(arr) ? arr : [])
+      .filter(m => m && typeof m.id === 'string' && !m._deleted)
+      .map(m => ({
+        label: m.name || m.id,
+        description: m.id,
+        detail: providers[parentUuid]?.name || providers[parentUuid]?.family || parentUuid,
+        value: m.id,
+        parentUuid,
+      })));
+
+  if (rows.length === 0) {
+    vscode.window.showInformationMessage('No custom models to remove.');
     return;
   }
 
-  const pick = await vscode.window.showQuickPick(
-    existing.map(m => ({ label: `${m.name || m.id} (${m.family})`, value: m.id, family: m.family })),
-    { placeHolder: 'Select a model to remove', ignoreFocusOut: true },
-  );
+  const pick = await vscode.window.showQuickPick(rows,
+    { placeHolder: 'Select a model to remove', ignoreFocusOut: true });
   if (!pick) return;
 
-  const updated = existing.filter(m => !(m.id === pick.value && m.family === pick.family));
-  await config.update('models', updated, vscode.ConfigurationTarget.Global);
+  map[pick.parentUuid] = (map[pick.parentUuid] ?? []).filter((m: any) => m?.id !== pick.value);
+  await config.update('models', map, vscode.ConfigurationTarget.Global);
   ctx.bridge.signal();
-  vscode.window.showInformationMessage(`🗑️ Removed "${pick.label}".`);
+  vscode.window.showInformationMessage(`Removed "${pick.label}".`);
 }
 
 // ---- Add Provider — step‑by‑step form (no JSON editing) ----
 
 async function _addProvider(ctx: Context): Promise<void> {
-  // Step 1 — Family name
-  const family = await vscode.window.showInputBox({
-    prompt: '1/3 — Provider family name (e.g. openai, ollama, groq)',
-    placeHolder: 'my-provider',
-    ignoreFocusOut: true,
-    validateInput: v => v?.trim() ? undefined : 'Family name is required',
-  });
-  if (!family) return;
-  const fam = family.trim();
+  // Step 1 — Family, from the engines that actually exist. It used to be a free
+  // text box, which let a provider be filed under a family no engine answers to.
+  const pick = await vscode.window.showQuickPick(
+    KNOWN_FAMILIES.map(f => ({ label: f.label, description: f.family, detail: f.desc, value: f.family })),
+    { placeHolder: '1/3 — Provider family', ignoreFocusOut: true, matchOnDetail: true },
+  );
+  if (!pick) return;
+  const fam = pick.value;
 
   // Step 2 — Base URL
   const baseUrl = await vscode.window.showInputBox({
-    prompt: `2/3 — API base URL for ${fam}`,
+    prompt: `2/3 — API base URL for ${pick.label}`,
+    value: defaultUrlFor(fam),
     placeHolder: 'https://api.example.com/v1',
     ignoreFocusOut: true,
     validateInput: v => v?.trim() ? undefined : 'Base URL is required',
@@ -336,7 +401,7 @@ async function _addProvider(ctx: Context): Promise<void> {
 
   // Step 3 — Model aliases (optional, comma-separated key=value pairs)
   const aliasesRaw = await vscode.window.showInputBox({
-    prompt: `3/3 — Model aliases for ${fam} (optional). Format: pickerId=apiName, pickerId2=apiName2`,
+    prompt: `3/3 — Model aliases for ${pick.label} (optional). Format: pickerId=apiName`,
     placeHolder: 'gpt-4o=gpt-4o-2024-08-06, my-model=real-model-name',
     ignoreFocusOut: true,
   });
@@ -349,40 +414,76 @@ async function _addProvider(ctx: Context): Promise<void> {
     }
   }
 
-  // Write into settings
+  // Providers are keyed by UUID and carry their family as a field. This command
+  // used to key them by the family name and omit the field entirely, so nothing
+  // that resolves a provider by family could ever find one it had written.
   const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
-  const providers = config.get<Record<string, unknown>>('providers') || {};
-  providers[fam] = { baseUrl: baseUrl.trim(), modelAlias };
+  const providers = { ...(config.get<Record<string, any>>('providers') || {}) };
+  const uuid = _uuid();
+  providers[uuid] = {
+    uuid,
+    family: fam,
+    name: pick.label,
+    baseUrl: baseUrl.trim(),
+    modelAlias,
+  };
   await config.update('providers', providers, vscode.ConfigurationTarget.Global);
 
   ctx.bridge.signal();
-  vscode.window.showInformationMessage(
-    `✅ Provider "${fam}" added (${baseUrl.trim()}). ` +
-    `Set its API key with "Copilot Adapter Kit: Set API Key".`
+  const next = await vscode.window.showInformationMessage(
+    `Provider "${pick.label}" added (${baseUrl.trim()}).`,
+    'Set API key', 'Open Settings',
   );
+  if (next === 'Set API key') await vscode.commands.executeCommand('copilot-adapter-kit.setApiKey');
+  if (next === 'Open Settings') await vscode.commands.executeCommand('copilot-adapter-kit.openPanel');
 }
+
+/** Same id shape the settings panel uses, so both write interchangeable rows. */
+function _uuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 
 // ---- Remove Provider — pick from provider list ----
 
 async function _removeProvider(ctx: Context): Promise<void> {
   const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
-  const providers = config.get<Record<string, { baseUrl: string }>>('providers') || {};
-  const entries = Object.entries(providers);
+  const providers = { ...(config.get<Record<string, any>>('providers') || {}) };
+
+  // Anything unreadable is skipped rather than dereferenced: this is user-edited
+  // JSON, and a half-written entry used to take the whole command down.
+  const entries = Object.entries(providers)
+    .filter(([, v]) => v && typeof v === 'object' && !v._deleted);
   if (!entries.length) {
     vscode.window.showInformationMessage('No providers configured.');
     return;
   }
 
   const pick = await vscode.window.showQuickPick(
-    entries.map(([k, v]) => ({ label: `${k} — ${v.baseUrl}`, value: k })),
+    // Keyed by UUID, so the key itself is not a name anyone recognises.
+    entries.map(([k, v]) => ({
+      label: v.name || v.family || k,
+      description: v.family ?? '',
+      detail: v.baseUrl || 'no base URL set',
+      value: k,
+    })),
     { placeHolder: 'Select a provider to remove', ignoreFocusOut: true },
   );
   if (!pick) return;
 
+  const confirm = await vscode.window.showWarningMessage(
+    `Remove "${pick.label}"? Its models stop appearing in the picker.`,
+    { modal: true }, 'Remove',
+  );
+  if (confirm !== 'Remove') return;
+
   delete providers[pick.value];
   await config.update('providers', providers, vscode.ConfigurationTarget.Global);
   ctx.bridge.signal();
-  vscode.window.showInformationMessage(`🗑️ Removed provider "${pick.value}".`);
+  vscode.window.showInformationMessage(`Removed provider "${pick.label}".`);
 }
 
 // ---- Configure — master wizard for all simple settings ----
@@ -391,11 +492,11 @@ async function _configure(ctx: Context): Promise<void> {
   // Category picker
   const category = await vscode.window.showQuickPick(
     [
-      { label: '⚙️  Max Output Tokens',    desc: 'Limit tokens per request',   id: 'maxTokens' },
-      { label: '🛡️  Spend Guard',          desc: 'Daily budget & loop limits',  id: 'budget' },
-      { label: '📋  Log Level',            desc: 'quiet / meta / dump',         id: 'logLevel' },
-      { label: '🔧  Stabilize Tools',      desc: 'Lock tool config for caching',id: 'stabilizeTools' },
-      { label: '👁️  Show Built‑in Models', desc: 'Toggle built‑in model list',  id: 'showBuiltinModels' },
+      { label: '$(settings-gear)  Max Output Tokens',    desc: 'Limit tokens per request',   id: 'maxTokens' },
+      { label: '$(shield)  Spend Guard',          desc: 'Daily budget & loop limits',  id: 'budget' },
+      { label: '$(list-unordered)  Log Level',            desc: 'quiet / meta / dump',         id: 'logLevel' },
+      { label: '$(tools)  Stabilize Tools',      desc: 'Lock tool config for caching',id: 'stabilizeTools' },
+      { label: '$(eye)  Show Built‑in Models', desc: 'Toggle built‑in model list',  id: 'showBuiltinModels' },
     ],
     { placeHolder: 'Select a setting to change', ignoreFocusOut: true },
   );
@@ -415,51 +516,51 @@ async function _configure(ctx: Context): Promise<void> {
       });
       if (v !== undefined) {
         await config.update('maxTokens', parseInt(v, 10) || 0, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`✅ Max output tokens set to ${parseInt(v, 10) || 'the model maximum'}.`);
+        vscode.window.showInformationMessage(`Max output tokens set to ${parseInt(v, 10) || 'the model maximum'}.`);
       }
       break;
     }
     case 'logLevel': {
       const v = await vscode.window.showQuickPick(
         [
-          { label: '🔇 quiet', desc: 'No output channel', value: 'quiet' },
-          { label: '📋 meta',  desc: 'Log request fingerprints & diffs', value: 'meta' },
-          { label: '💾 dump',  desc: 'meta + write request payloads to disk', value: 'dump' },
+          { label: '$(mute) quiet', desc: 'No output channel', value: 'quiet' },
+          { label: '$(list-unordered) meta',  desc: 'Log request fingerprints & diffs', value: 'meta' },
+          { label: '$(save) dump',  desc: 'meta + write request payloads to disk', value: 'dump' },
         ],
         { placeHolder: 'Select log level', ignoreFocusOut: true },
       );
       if (v) {
         await config.update('logLevel', v.value, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`✅ Log level set to "${v.value}".`);
+        vscode.window.showInformationMessage(`Log level set to "${v.value}".`);
       }
       break;
     }
     case 'stabilizeTools': {
       const v = await vscode.window.showQuickPick(
         [
-          { label: '✅ Enabled',  desc: 'Pre-activate tools for cache stability', value: true },
-          { label: '❌ Disabled', desc: 'Default — tools may shift between turns', value: false },
+          { label: '$(check) Enabled',  desc: 'Pre-activate tools for cache stability', value: true },
+          { label: '$(circle-slash) Disabled', desc: 'Default — tools may shift between turns', value: false },
         ],
         { placeHolder: 'Enable tool stabilization?', ignoreFocusOut: true },
       );
       if (v !== undefined) {
         await config.update('stabilizeTools', v.value, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`✅ Stabilize tools: ${v.value ? 'ON' : 'OFF'}.`);
+        vscode.window.showInformationMessage(`Stabilize tools: ${v.value ? 'ON' : 'OFF'}.`);
       }
       break;
     }
     case 'showBuiltinModels': {
       const v = await vscode.window.showQuickPick(
         [
-          { label: '👁️  Show', desc: 'Built‑in GPT + Codex models visible in picker', value: true },
-          { label: '🙈 Hide',  desc: 'Only your custom models appear in picker', value: false },
+          { label: '$(eye)  Show', desc: 'Built‑in GPT + Codex models visible in picker', value: true },
+          { label: '$(eye-closed) Hide',  desc: 'Only your custom models appear in picker', value: false },
         ],
         { placeHolder: 'Show built‑in models in picker?', ignoreFocusOut: true },
       );
       if (v !== undefined) {
         await config.update('showBuiltinModels', v.value, vscode.ConfigurationTarget.Global);
         ctx.bridge.signal();
-        vscode.window.showInformationMessage(`✅ Built‑in models: ${v.value ? 'SHOWN' : 'HIDDEN'}.`);
+        vscode.window.showInformationMessage(`Built‑in models: ${v.value ? 'SHOWN' : 'HIDDEN'}.`);
       }
       break;
     }
@@ -538,13 +639,13 @@ async function _resetBudget(ctx: Context): Promise<void> {
   );
   if (ok !== 'Reset') return;
   await ctx.budget.reset();
-  vscode.window.showInformationMessage('✅ Usage counters reset for today.');
+  vscode.window.showInformationMessage('Usage counters reset for today.');
 }
 
 async function _setSpendGuard(ctx: Context, on: boolean): Promise<void> {
   if (on) {
     await ctx.budget.setEnforcement(true);
-    vscode.window.showInformationMessage('🛡️ Spend guard re-enabled. Daily limits are in force again.');
+    vscode.window.showInformationMessage('Spend guard re-enabled. Daily limits are in force again.');
     return;
   }
 
@@ -563,7 +664,7 @@ async function _setSpendGuard(ctx: Context, on: boolean): Promise<void> {
   ].join('\n');
 
   const first = await vscode.window.showWarningMessage(
-    '⚠️ DANGER — disable the spend guard?',
+    'DANGER — disable the spend guard?',
     { modal: true, detail },
     'I accept unlimited charges',
   );
@@ -579,7 +680,7 @@ async function _setSpendGuard(ctx: Context, on: boolean): Promise<void> {
 
   await ctx.budget.setEnforcement(false);
   void vscode.window.showWarningMessage(
-    '🔴 Spend guard DISABLED. Requests are now uncapped — re-enable it as soon as you are done.',
+    'Spend guard DISABLED. Requests are now uncapped — re-enable it as soon as you are done.',
     'Re-enable now',
   ).then(c => { if (c === 'Re-enable now') void _setSpendGuard(ctx, true); });
 }

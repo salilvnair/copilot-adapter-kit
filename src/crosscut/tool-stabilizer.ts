@@ -106,7 +106,7 @@ function _buildConfigShiftAlert(audit: ActivatorAudit): string {
   const activeCount = audit.alreadyActivated.length + audit.pendingActivators.length;
   const msg = activeCount <= 64
     ? `Tool configuration is stable — ${activeCount} tools active. No shift detected.`
-    : `⚠️ Tool list is unstable — ${activeCount} tools active across ${audit.roundsUsed} rounds. ` +
+    : `Tool list is unstable — ${activeCount} tools active across ${audit.roundsUsed} rounds. ` +
       `Cache hit rate may be affected. Consider disabling unused tools in VS Code Configure Tools.`;
 
   return [
