@@ -136,7 +136,17 @@ console.log('\n=== 4. the hover draws the day rather than filling a bar ===');
     console.log(`  SKIP  shape assertions (only ${DRAWN} hour(s) elapsed today)`);
   }
 
-  check('says when it resets', /Resets \w+ \d+/.test(v), v.slice(0, 200));
+  // VS Code shrink-wraps each table independently, so anything in a table of
+  // its own lines up with nothing. One table, or the columns are decorative.
+  check('the whole hover is a single table',
+    (v.match(/\|:--\|--:\|/g) ?? []).length === 1, String((v.match(/\|:--\|--:\|/g) ?? []).length));
+  check('every line is a table row',
+    v.split('\n').filter(l => l.trim() && !l.startsWith('|')).length === 0,
+    v.split('\n').filter(l => l.trim() && !l.startsWith('|')).join(' / '));
+  // The hover sanitiser drops raw HTML silently, so it must never be relied on.
+  check('no raw HTML, which the hover strips', !/<[a-z]+[ >]/i.test(v), v.slice(0, 200));
+
+  check('says how long is left in the day', /\| Resets \| in [\dhm ]+ \|/.test(v), v.slice(-200));
   check('reports the figures', v.includes('520.0K') && v.includes('$6.25'), v.slice(0, 400));
   check('reports requests', v.includes('| Requests | 42 |'));
   check('offers the panel', v.includes('command:copilot-adapter-kit.openPanel'));
@@ -175,9 +185,10 @@ console.log('\n=== 6. the hover changes with the state ===');
   check('no limit set says so instead of a percentage', noLimit.includes('no limit'));
 
   const quiet = buildTooltip(status()).value;
-  check('an untouched day says so rather than drawing a flat line',
-    quiet.includes('Nothing spent yet today'), quiet.slice(0, 300));
-  check('and draws no sparkline at all', (quiet.match(CELLS) ?? []).length === 0);
+  check('an untouched day draws no sparkline — a flat line would read as data',
+    (quiet.match(CELLS) ?? []).length === 0, quiet.slice(0, 300));
+  check('and still reports the figures', quiet.includes('| **Tokens** | 0 of 2.00M |'), quiet.slice(0, 400));
+  check('an empty day costs no extra rows', quiet.split('\n').length < 14, String(quiet.split('\n').length));
 
   const estimated = buildTooltip(status({ day: { estimated: true } })).value;
   check('estimates are declared', estimated.includes('estimates'));

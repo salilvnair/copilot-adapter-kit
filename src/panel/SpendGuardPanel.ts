@@ -5,6 +5,7 @@
 // while an agent ran, and blocked the window while it asked. This panel sits in
 // a split and updates live as the ledger moves.
 
+import { join } from 'path';
 import vscode from 'vscode';
 import type { Context } from '../kernel/context';
 import { WebviewHost } from './webview-host';
@@ -32,6 +33,12 @@ export class SpendGuardPanel {
       'Spend Guard',
       vscode.ViewColumn.Active,
       this.host.options,
+    );
+
+    // Indigo rather than a ThemeIcon: VS Code recolours codicons to the tab
+    // foreground, which left the guard reading as just another grey tab.
+    this.panel.iconPath = vscode.Uri.file(
+      join(ext.extensionPath, 'resources', 'shield-indigo.svg'),
     );
 
     try {
