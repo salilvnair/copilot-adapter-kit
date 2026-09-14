@@ -238,6 +238,7 @@ export interface UiAuditEntry {
 }
 
 export function insertUiAudit(entry: Omit<UiAuditEntry, 'id' | 'created_at'>): void {
+  if (!isUiAuditEnabled(entry.event_type)) return;
   if (!_db) return;
   _db.run(
     'INSERT INTO ui_audit (event_type, module, button, action, metadata) VALUES (?, ?, ?, ?, ?)',
@@ -264,4 +265,92 @@ export function clearUiAuditEntries(): void {
 
 export function auditCounts(): { ai: number; ui: number } {
   return { ai: _count('cak_audit'), ui: _count('ui_audit') };
+}
+
+/* ── DB Explorer ──────────────────────────────────────────────────────────
+ *
+ * Browsing the database the extension keeps about you, from inside the
+ * extension. Read-mostly: list the tables, page through rows, and delete a
+ * single row. There is no query box on purpose — arbitrary SQL against your own
+ * audit store is a footgun with no upside here.
+ */
+
+export interface TableInfo { name: string; rowCount: number; columns: string[] }
+
+/** Every user table, with its columns and how many rows it holds. */
+export function listTables(): TableInfo[] {
+  if (!_db) return [];
+  const out: TableInfo[] = [];
+  const names = _db.exec(
+    `SELECT name FROM sqlite_master
+      WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+      ORDER BY name`,
+  );
+  for (const name of names[0]?.values.map(v => String(v[0])) ?? []) {
+    out.push({ name, rowCount: _count(name), columns: _columnsOf(name) });
+  }
+  return out;
+}
+
+function _columnsOf(table: string): string[] {
+  if (!_db) return [];
+  // PRAGMA cannot be parameterised; the name comes from sqlite_master, not input.
+  const res = _db.exec(`PRAGMA table_info(${_ident(table)})`);
+  return res[0]?.values.map(v => String(v[1])) ?? [];
+}
+
+/** A page of rows, newest first where the table records a time. */
+export function getTableRows(table: string, limit = 200): Record<string, unknown>[] {
+  if (!_db || !_isKnownTable(table)) return [];
+  const cols = _columnsOf(table);
+  const order = cols.includes('created_at') ? ' ORDER BY created_at DESC' : '';
+  const stmt = _db.prepare(`SELECT * FROM ${_ident(table)}${order} LIMIT ?`);
+  stmt.bind([limit]);
+  const rows: Record<string, unknown>[] = [];
+  while (stmt.step()) rows.push(stmt.getAsObject() as Record<string, unknown>);
+  stmt.free();
+  return rows;
+}
+
+/** Delete one row by its key. Returns whether anything was removed. */
+export function deleteTableRow(table: string, pkCol: string, pkVal: unknown): boolean {
+  if (!_db || !_isKnownTable(table)) return false;
+  if (!_columnsOf(table).includes(pkCol)) return false;   // never an arbitrary column
+  _db.run(`DELETE FROM ${_ident(table)} WHERE ${_ident(pkCol)} = ?`, [pkVal as never]);
+  _scheduleSave();
+  return true;
+}
+
+/** Only tables that exist may be addressed, whatever the webview sends. */
+function _isKnownTable(table: string): boolean {
+  if (!_db) return false;
+  const res = _db.exec(
+    `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`, [table] as never,
+  );
+  return (res[0]?.values.length ?? 0) > 0;
+}
+
+/** Quote an identifier so a name can never be read as SQL. */
+function _ident(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+/* ── Audit config ─────────────────────────────────────────────────────────
+ *
+ * Which UI events are worth a row. The switches live in the panel (Developer
+ * Tools → Audit Config) and are mirrored here, because most rows are written by
+ * the host rather than the webview: without this, turning an event off would
+ * quieten the screen while the database kept filling up.
+ *
+ * Unknown ids are recorded. An event nobody has classified yet is exactly the
+ * one worth seeing, and silence is the wrong default for an audit log.
+ */
+let _uiAuditConfig: Record<string, boolean> = {};
+
+export function setUiAuditConfig(enabled: Record<string, boolean>): void {
+  _uiAuditConfig = enabled && typeof enabled === 'object' ? enabled : {};
+}
+
+export function isUiAuditEnabled(eventType: string): boolean {
+  return _uiAuditConfig[eventType] !== false;
 }

@@ -1,0 +1,240 @@
+/**
+ * AuditConfigTab — configurable audit event framework.
+ * Each event type has: module, button, action — enable/disable individually.
+ * Config persists to localStorage via audit-events.
+ * Groups are collapsible via the category chip.
+ *
+ * Ported from daakia.
+ */
+import { useState, useCallback, useEffect, useRef } from 'react';
+import * as I from '../../icons';
+import {
+  AUDIT_EVENT_DEFS, getAuditConfig, setAuditEventEnabled, isAuditEventEnabled,
+  resetAuditConfig, logUiEvent,
+} from './audit-events';
+
+/*
+  The order the sections appear in, and — because this list decides what is
+  rendered at all — the reason a module missing here has its events silently
+  dropped from the screen that turns them on. Anything not listed falls in at
+  the end rather than disappearing.
+*/
+const MODULE_ORDER = [
+  'Providers', 'Models', 'API Keys', 'Spend Guard', 'Workspace',
+  'Git Tools', 'Audit', 'Dev Tools', 'Danger Zone', 'Status Bar',
+];
+
+/** Collapse state IS the configuration of this screen, so it survives a reload. */
+const COLLAPSED_KEY = 'cak.devtools.audit.collapsed';
+const SCROLL_KEY = 'cak.devtools.audit.scroll';
+
+const readPref = (k: string, d = '') => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const writePref = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private window */ } };
+
+export function AuditConfigTab() {
+  const [, setTick] = useState(0);
+  const refresh = useCallback(() => setTick(t => t + 1), []);
+  getAuditConfig();
+
+  // Empty set = all groups expanded, which stays the default for a first visit.
+  const [collapsedRaw, setCollapsedRaw] = useState(() => readPref(COLLAPSED_KEY));
+  const collapsed = new Set(collapsedRaw.split(',').filter(Boolean));
+
+  const toggleCollapse = (module: string) => {
+    const n = new Set(collapsed);
+    if (n.has(module)) n.delete(module); else n.add(module);
+    const next = [...n].join(',');
+    writePref(COLLAPSED_KEY, next);
+    setCollapsedRaw(next);
+  };
+
+  /*
+    Scroll position, restored once on mount and recorded as it changes.
+    scrollTop is set in an effect rather than during render, because the rows
+    have to exist before there is anything to scroll past.
+  */
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTop = Number(readPref(SCROLL_KEY, '0')) || 0;
+  }, []);
+
+  const toggle = (id: string, enabled: boolean) => {
+    logUiEvent('devtools.audit_config', { eventId: id, enabled, scope: 'single' });
+    setAuditEventEnabled(id, enabled);
+    refresh();
+  };
+
+  const toggleModule = (module: string, enable: boolean) => {
+    logUiEvent('devtools.audit_config', { module, enabled: enable, scope: 'group' });
+    AUDIT_EVENT_DEFS.filter(d => d.module === module).forEach(d => setAuditEventEnabled(d.id, enable));
+    refresh();
+  };
+
+  const toggleAll = (enable: boolean) => {
+    logUiEvent('devtools.audit_config', { enabled: enable, scope: 'all' });
+    AUDIT_EVENT_DEFS.forEach(d => setAuditEventEnabled(d.id, enable));
+    refresh();
+  };
+
+  const handleReset = () => { resetAuditConfig(); refresh(); };
+
+  // Every module in the taxonomy, ordered — listed ones first, the rest after.
+  const allModules = [
+    ...MODULE_ORDER,
+    ...[...new Set(AUDIT_EVENT_DEFS.map(d => d.module))].filter(m => !MODULE_ORDER.includes(m)),
+  ];
+  const grouped = allModules.map(module => ({
+    module,
+    defs: AUDIT_EVENT_DEFS.filter(d => d.module === module),
+  })).filter(g => g.defs.length > 0);
+
+  const totalEnabled = AUDIT_EVENT_DEFS.filter(d => isAuditEventEnabled(d.id)).length;
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* ─── Toolbar ─── */}
+      <div className="flex items-center justify-between px-4 py-2 border-b shrink-0"
+        style={{ borderColor: 'var(--color-surface-border)', backgroundColor: 'color-mix(in srgb, var(--color-text-primary) 3%, transparent)' }}>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-medium text-[var(--color-text-primary)]">Audit Config</span>
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full tabular-nums"
+            style={{ color: 'var(--color-primary)', backgroundColor: 'color-mix(in srgb, var(--color-primary) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--color-primary) 20%, transparent)' }}>
+            {totalEnabled}/{AUDIT_EVENT_DEFS.length} active
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button type="button" onClick={() => toggleAll(true)}
+            className="px-2 py-0.5 text-[10px] rounded cursor-pointer transition-colors border"
+            style={{ color: 'var(--color-success)', borderColor: 'color-mix(in srgb, var(--color-success) 25%, transparent)', background: 'color-mix(in srgb, var(--color-success) 6%, transparent)' }}>
+            Enable All
+          </button>
+          <button type="button" onClick={() => toggleAll(false)}
+            className="px-2 py-0.5 text-[10px] rounded cursor-pointer transition-colors border"
+            style={{ color: 'var(--color-error)', borderColor: 'color-mix(in srgb, var(--color-error) 25%, transparent)', background: 'color-mix(in srgb, var(--color-error) 6%, transparent)' }}>
+            Disable All
+          </button>
+          <button type="button" onClick={handleReset}
+            className="px-2 py-0.5 text-[10px] rounded cursor-pointer transition-colors border text-[var(--color-text-muted)]"
+            style={{ borderColor: 'color-mix(in srgb, var(--color-text-primary) 12%, transparent)', background: 'color-mix(in srgb, var(--color-text-primary) 4%, transparent)' }}>
+            Reset Defaults
+          </button>
+        </div>
+      </div>
+
+      {/* ─── Description ─── */}
+      <div className="px-4 py-2 shrink-0 border-b" style={{ borderColor: 'var(--color-surface-border)' }}>
+        <p className="text-[10.5px] text-[var(--color-text-muted)] leading-relaxed">
+          Control which UI events get recorded in the Audit Log. Events are structured as
+          <span className="font-mono text-[10px] mx-1 px-1 py-0.5 rounded"
+            style={{ color: 'var(--color-primary)', backgroundColor: 'color-mix(in srgb, var(--color-primary) 10%, transparent)' }}>
+            module · button · action
+          </span>
+          — disable noisy events to keep the log focused.
+        </p>
+      </div>
+
+      {/* ─── Event type list ─── */}
+      <div ref={listRef}
+        onScroll={e => writePref(SCROLL_KEY, String(e.currentTarget.scrollTop))}
+        className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-3">
+        <div className="flex flex-col gap-4">
+          {grouped.map(({ module, defs }) => {
+            const color = defs[0]?.color ?? 'var(--color-text-muted)';
+            const groupEnabled = defs.filter(d => isAuditEventEnabled(d.id)).length;
+            const allGroupEnabled = groupEnabled === defs.length;
+            const isCollapsed = collapsed.has(module);
+            return (
+              <div key={module}>
+                {/* Group header — chip is clickable to collapse */}
+                <div className="flex items-center gap-2 mb-1.5">
+                  <button
+                    type="button"
+                    onClick={() => toggleCollapse(module)}
+                    className="flex items-center gap-2 cursor-pointer min-w-0"
+                    style={{ background: 'none', border: 'none', padding: 0 }}
+                    aria-expanded={!isCollapsed}
+                  >
+                    <I.ChevronRight
+                      size={12}
+                      style={{
+                        color,
+                        transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)',
+                        transition: 'transform 0.2s ease',
+                        flexShrink: 0,
+                        opacity: 0.7,
+                      }}
+                    />
+                    <span className="text-[9.5px] font-bold uppercase tracking-widest px-2 py-0.5 rounded"
+                      style={{ color, backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)` }}>
+                      {module}
+                    </span>
+                  </button>
+                  <div className="flex-1 h-px" style={{ background: `color-mix(in srgb, ${color} 15%, transparent)` }} />
+                  <span className="text-[9px]" style={{ color: 'var(--color-text-muted)' }}>{groupEnabled}/{defs.length}</span>
+                  {/* Group-level toggle switch */}
+                  <button type="button"
+                    onClick={e => { e.stopPropagation(); toggleModule(module, !allGroupEnabled); }}
+                    className="w-[28px] h-[15px] rounded-full cursor-pointer transition-all relative flex-shrink-0"
+                    style={{ backgroundColor: allGroupEnabled ? color : 'color-mix(in srgb, var(--color-text-primary) 10%, transparent)' }}
+                    title={allGroupEnabled ? `Disable all ${module}` : `Enable all ${module}`}
+                    aria-label={allGroupEnabled ? `Disable all ${module}` : `Enable all ${module}`}>
+                    <span className="absolute top-[2px] w-[11px] h-[11px] rounded-full bg-white shadow transition-all duration-200"
+                      style={{ left: allGroupEnabled ? '14px' : '2px' }} />
+                  </button>
+                </div>
+
+                {/* Collapsible rows */}
+                {!isCollapsed && (
+                  <div className="rounded-xl border overflow-hidden"
+                    style={{ borderColor: `color-mix(in srgb, ${color} 12%, transparent)`, backgroundColor: `color-mix(in srgb, ${color} 2%, transparent)` }}>
+                    {defs.map((def, idx) => {
+                      const enabled = isAuditEventEnabled(def.id);
+                      return (
+                        <div key={def.id}
+                          className={`flex items-center gap-3 px-3 py-2 ${idx < defs.length - 1 ? 'border-b' : ''}`}
+                          style={{ borderColor: 'color-mix(in srgb, var(--color-text-primary) 4%, transparent)' }}>
+                          {/* Labels */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[10.5px] font-medium"
+                                style={{ color: enabled ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
+                                {def.description}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="font-mono text-[9px] px-1 py-0.5 rounded"
+                                style={{ color, backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)` }}>
+                                {def.button}
+                              </span>
+                              <span className="text-[9px] text-[var(--color-text-muted)]">·</span>
+                              <span className="font-mono text-[9px] text-[var(--color-text-muted)]">{def.action}</span>
+                              <span className="text-[9px] text-[var(--color-text-muted)]">·</span>
+                              <span className="font-mono text-[9px] text-[var(--color-text-muted)]">{def.id}</span>
+                            </div>
+                          </div>
+                          {/* Per-event toggle */}
+                          <button type="button"
+                            onClick={() => toggle(def.id, !enabled)}
+                            className="w-[32px] h-[18px] rounded-full cursor-pointer transition-all flex-shrink-0 relative"
+                            style={{ backgroundColor: enabled ? color : 'color-mix(in srgb, var(--color-text-primary) 10%, transparent)' }}
+                            title={enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'}
+                            aria-label={`${def.description} — ${enabled ? 'enabled' : 'disabled'}`}
+                            aria-pressed={enabled}>
+                            <span className="absolute top-[3px] w-[12px] h-[12px] rounded-full bg-white shadow transition-all duration-200"
+                              style={{ left: enabled ? '17px' : '3px' }} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

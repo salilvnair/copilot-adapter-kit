@@ -4,7 +4,7 @@
  * .set-main. Destinations not yet built render the Coming screen rather than
  * disappearing from the rail, so the shape of the product stays visible. */
 
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import * as I from '../icons';
 import { Chip, IconBtn } from '../ui';
 import { Menu } from '../ui/Menu';
@@ -12,18 +12,23 @@ import { CommandPalette } from './CommandPalette';
 import { Keys } from './screens/Keys';
 import { Models } from './screens/Models';
 import { Providers } from './screens/Providers';
-import { AuditLog } from './screens/AuditLog';
 import { Configuration } from './screens/Configuration';
 import { GitTools } from './screens/GitTools';
 import { SpendGuard } from './screens/SpendGuard';
-import { Bin, Danger, DevTools, Dumps, JsonSettings } from './screens/Workspace';
+import { Bin, Danger, Dumps, JsonSettings } from './screens/Workspace';
+
 import { actions, liveProviders, useAppState, type AppState } from './state';
+
+/* Developer Tools carries Monaco, which is most of the panel's weight. Loading
+   it with the route rather than with the panel keeps every other screen as
+   quick to open as it was before the editor existed. */
+const DevTools = lazy(() => import('./devtools/DevTools').then(m => ({ default: m.DevTools })));
 import { onThemeMode, setThemeMode, themeMode, type ThemeMode } from '../vscode';
 
 export type Route =
   | 'providers' | 'models' | 'keys'
   | 'guard'
-  | 'config' | 'git' | 'json' | 'dumps' | 'audit' | 'dev'
+  | 'config' | 'git' | 'json' | 'dumps' | 'dev'
   | 'bin' | 'danger';
 
 export function Shell() {
@@ -188,8 +193,7 @@ function Rail({ state, route, go }: { state: AppState; route: Route; go: (r: Rou
       {item('git', <I.Branch size={15} />, 'Git Tools')}
       {item('json', <I.Braces size={15} />, 'JSON Settings')}
       {item('dumps', <I.Folder size={15} />, 'Request Dumps')}
-      {item('audit', <I.Chart size={15} />, 'Audit Log', _auditCount(state))}
-      {item('dev', <I.Braces size={15} />, 'Dev Tools')}
+      {item('dev', <I.Chart size={15} />, 'Developer Tools', _auditCount(state))}
 
       <div className="rail-foot">
         {item('bin', <I.Trash size={15} />, 'Bin', _binCount(state))}
@@ -239,10 +243,17 @@ function Screen({ state, route, go }: { state: AppState; route: Route; go: (r: R
       return <JsonSettings state={state} />;
     case 'dumps':
       return <Dumps state={state} />;
-    case 'audit':
-      return <AuditLog state={state} />;
     case 'dev':
-      return <DevTools state={state} />;
+      return (
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-full text-[11px]"
+            style={{ color: 'var(--c-muted)' }}>
+            Loading Developer Tools…
+          </div>
+        }>
+          <DevTools state={state} />
+        </Suspense>
+      );
     case 'bin':
       return <Bin state={state} />;
     case 'danger':

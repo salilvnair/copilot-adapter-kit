@@ -256,14 +256,6 @@ test.describe('The remaining destinations', () => {
     expect(await postTypes(page)).toContain('openDumps');
   });
 
-  test('Dev Tools draws the interceptor chain in order', async ({ page }) => {
-    await goTo(page, 'Dev Tools');
-    const nodes = page.locator('.chain .node');
-    await expect(nodes).toHaveCount(6);
-    // The guard must be the first thing a request meets.
-    await expect(nodes.nth(1)).toContainText('BudgetWarden');
-  });
-
   test('the Bin explains itself when empty', async ({ page }) => {
     await goTo(page, 'Bin');
     await expect(page.locator('.set-main')).toContainText('Nothing here');

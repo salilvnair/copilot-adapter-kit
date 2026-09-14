@@ -12,8 +12,9 @@ import { KNOWN_FAMILIES } from '../kernel/families';
 import { Context } from '../kernel/context';
 import type { Payload, StreamEvents } from '../mesh/contract';
 import {
-  auditCounts, clearAuditEntries, clearUiAuditEntries, dbStatus,
-  getAuditEntries, getUiAuditEntries, insertUiAudit,
+  auditCounts, clearAuditEntries, clearUiAuditEntries, dbStatus, deleteTableRow,
+  getAuditEntries, getTableRows, getUiAuditEntries, insertUiAudit, listTables,
+  setUiAuditConfig,
 } from '../storage/db';
 import { WebviewHost } from './webview-host';
 
@@ -70,18 +71,6 @@ export class SettingsPanel {
       switch (msg.type) {
         case 'getState':
           await this._sendState();
-          break;
-        case 'loadAudit':
-          await this._sendState();
-          break;
-        case 'clearAudit':
-          clearAuditEntries();
-          clearUiAuditEntries();
-          insertUiAudit({ event_type: 'audit.clear', module: 'audit' });
-          await this._sendState();
-          break;
-        case 'exportAudit':
-          await this._exportAudit();
           break;
         case 'testProvider':
           await this._probeAll(msg.payload?.uuid);
@@ -180,6 +169,67 @@ export class SettingsPanel {
         case 'genCommitMsg':
           await this._genCommitMsg(msg.payload?.diff, msg.payload?.family);
           break;
+
+        /* ── Developer Tools ──────────────────────────────────────────────
+         * Same message names daakia uses, so the three tabs are the same
+         * components talking to the same protocol. */
+        case 'aiAudit:load':
+          this.panel.webview.postMessage({
+            type: 'aiAudit:data', entries: getAuditEntries(msg.payload?.limit ?? 500),
+          });
+          break;
+        case 'uiAudit:load':
+          this.panel.webview.postMessage({
+            type: 'uiAudit:data', entries: getUiAuditEntries(msg.payload?.limit ?? 500),
+          });
+          break;
+        case 'aiAudit:clear':
+          clearAuditEntries();
+          await this._sendState();
+          break;
+        case 'uiAudit:clear':
+          clearUiAuditEntries();
+          await this._sendState();
+          break;
+        case 'logUiAudit':
+          insertUiAudit({
+            event_type: msg.payload?.event_type ?? 'unknown',
+            module: msg.payload?.module ?? 'Unknown',
+            button: msg.payload?.button,
+            action: msg.payload?.action,
+            metadata: msg.payload?.metadata ? JSON.stringify(msg.payload.metadata) : undefined,
+          });
+          break;
+        case 'setAuditConfig':
+          // The host writes most audit rows, so it needs the same switches the
+          // Audit Config screen sets — otherwise turning an event off would
+          // quieten the screen while the database kept filling up.
+          setUiAuditConfig(msg.payload?.enabled ?? {});
+          break;
+        case 'dbExplorer:getTables':
+          this.panel.webview.postMessage({ type: 'dbExplorer:tables', tables: listTables() });
+          break;
+        case 'dbExplorer:getRows': {
+          const tableName = String(msg.payload?.tableName ?? '');
+          const table = listTables().find(t => t.name === tableName);
+          this.panel.webview.postMessage({
+            type: 'dbExplorer:rows',
+            tableName,
+            columns: table?.columns ?? [],
+            rows: getTableRows(tableName, msg.payload?.limit ?? 200),
+          });
+          break;
+        }
+        case 'dbExplorer:deleteRow': {
+          const ok = deleteTableRow(
+            String(msg.payload?.tableName ?? ''),
+            String(msg.payload?.pkCol ?? ''),
+            msg.payload?.pkVal,
+          );
+          this.panel.webview.postMessage({ type: 'dbExplorer:rowDeleted', ok });
+          await this._sendState();
+          break;
+        }
       }
     }
   }
@@ -296,24 +346,6 @@ export class SettingsPanel {
   }
 
   /** Write the whole log out as JSON, wherever the user chooses. */
-  private async _exportAudit(): Promise<void> {
-    const target = await vscode.window.showSaveDialog({
-      title: 'Export the audit log',
-      defaultUri: vscode.Uri.file(`cak-audit-${new Date().toISOString().slice(0, 10)}.json`),
-      filters: { JSON: ['json'] },
-    });
-    if (!target) return;
-
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      database: dbStatus().path,
-      calls: getAuditEntries(10_000),
-      actions: getUiAuditEntries(10_000),
-    };
-    await vscode.workspace.fs.writeFile(target, Buffer.from(JSON.stringify(payload, null, 2), 'utf-8'));
-    insertUiAudit({ event_type: 'audit.export', module: 'audit', action: target.fsPath });
-    void vscode.window.showInformationMessage(`Audit log written to ${target.fsPath}`);
-  }
 
   /**
    * Check reachability and push the result. One provider when given a uuid,

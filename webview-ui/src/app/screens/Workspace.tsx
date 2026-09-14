@@ -138,55 +138,6 @@ export function Dumps({ state }: { state: AppState }) {
 
 /* ── Dev tools ────────────────────────────────────────────────────────── */
 
-export function DevTools({ state }: { state: AppState }) {
-  const provs = liveProviders(state);
-  return (
-    <div className="set-main">
-      <PageHead title="Engine mesh" sub="how a request reaches a provider" />
-
-      <Card header="Interceptor chain" right="order matters — the guard must see it first">
-        <div className="chain" style={{ paddingTop: 12, overflowX: 'auto' }}>
-          <span className="node"><span className="a">Copilot</span><span className="b">messages in</span></span>
-          <span className="arr"><I.ArrowRight size={15} /></span>
-          <span className="node hot"><span className="a">BudgetWarden</span><span className="b">refuse or allow</span></span>
-          <span className="arr"><I.ArrowRight size={15} /></span>
-          <span className="node"><span className="a">RateLimitGuard</span><span className="b">429 retry ×3</span></span>
-          <span className="arr"><I.ArrowRight size={15} /></span>
-          <span className="node"><span className="a">ErrorWarden</span><span className="b">readable faults</span></span>
-          <span className="arr"><I.ArrowRight size={15} /></span>
-          <span className="node"><span className="a">DiagTracer</span><span className="b">fingerprint</span></span>
-          <span className="arr"><I.ArrowRight size={15} /></span>
-          <span className="node eng"><span className="a">Engine</span><span className="b">SSE stream</span></span>
-        </div>
-      </Card>
-
-      <Card header="Configured providers" right={`${provs.length}`}>
-        <table className="models">
-          <thead>
-            <tr><th>Family</th><th>Engine</th><th>Endpoint</th><th className="num">Models</th></tr>
-          </thead>
-          <tbody>
-            {provs.map(([uuid, p]) => (
-              <tr key={uuid}>
-                <td>{p.family}</td>
-                <td>
-                  {p.family === 'anthropic'
-                    ? <Chip tone="pri" style={{ height: 17, fontSize: 9.5 }}>native</Chip>
-                    : <Chip tone="mute" style={{ height: 17, fontSize: 9.5 }}>openai-compat</Chip>}
-                </td>
-                <td className="mono" style={{ fontSize: 10.5 }}>{p.baseUrl.replace(/^https?:\/\//, '')}</td>
-                <td className="num">{(state.models[uuid] ?? []).filter(m => !m._deleted).length}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
-    </div>
-  );
-}
-
-/* ── Bin ──────────────────────────────────────────────────────────────── */
-
 export function Bin({ state }: { state: AppState }) {
   const [confirmEmpty, setConfirmEmpty] = useState(false);
   const provs = Object.entries(state.providers).filter(([, p]) => p?._deleted);

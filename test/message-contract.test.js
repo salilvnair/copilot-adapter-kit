@@ -1,5 +1,10 @@
 // Every message the webview can send must have a handler somewhere.
 //
+// The scan matches ':' in a message name as well as letters. It did not, which
+// meant the whole Developer Tools protocol — aiAudit:load, dbExplorer:getRows
+// and the rest — was invisible to the one test that exists to catch a control
+// that posts into nothing.
+//
 // This is the test that would have caught the overflow menu doing nothing: the
 // UI posted `removeProvider`, and whether anything listened was invisible until
 // somebody clicked it. A missing handler is now a failing test, not a silent
@@ -44,7 +49,7 @@ function walk(dir, out = []) {
 const posted = new Map(); // type -> files
 for (const file of walk(WEBVIEW_SRC)) {
   const src = fs.readFileSync(file, 'utf-8');
-  for (const m of src.matchAll(/\bpost\(\s*'([A-Za-z]+)'/g)) {
+  for (const m of src.matchAll(/\bpost\(\s*'([A-Za-z:]+)'/g)) {
     const rel = path.relative(ROOT, file).replace(/\\/g, '/');
     if (!posted.has(m[1])) posted.set(m[1], new Set());
     posted.get(m[1]).add(rel);
@@ -55,7 +60,7 @@ for (const file of walk(WEBVIEW_SRC)) {
 const handled = new Map(); // type -> panels
 for (const rel of PANELS) {
   const src = fs.readFileSync(path.join(ROOT, rel), 'utf-8');
-  for (const m of src.matchAll(/case\s+'([A-Za-z]+)'\s*:/g)) {
+  for (const m of src.matchAll(/case\s+'([A-Za-z:]+)'\s*:/g)) {
     if (!handled.has(m[1])) handled.set(m[1], new Set());
     handled.get(m[1]).add(path.basename(rel));
   }

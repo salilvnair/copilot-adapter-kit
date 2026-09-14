@@ -1,0 +1,340 @@
+/**
+ * DbExplorerTab — Developer Tools: DB Explorer
+ * Colorful: table list with per-table color, colored column headers, JSON preview.
+ *
+ * Ported from daakia.
+ */
+import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { ModalView, ButtonView } from '@salilvnair/dui';
+import { CodeEditor } from '../../ui/CodeEditor';
+import { post } from '../../vscode';
+import * as I from '../../icons';
+import { logUiEvent } from './audit-events';
+
+interface TableInfo { name: string; rowCount: number; columns: string[] }
+
+// ─── Per-table accent color ───────────────────────────────────────────────────
+
+const TABLE_COLORS: Record<string, string> = {
+  cak_audit: 'var(--color-primary)',
+  ui_audit:  '#818cf8',
+};
+
+function tableColor(name: string): string {
+  return TABLE_COLORS[name] ?? '#818cf8';
+}
+
+// ─── JSON popup modal ─────────────────────────────────────────────────────────
+
+function JsonPopupModal({ value, accentColor, onClose }: { value: string; accentColor: string; onClose: () => void }) {
+  /* On, because the reason to open this is to read the value. */
+  const [wrap, setWrap] = useState(true);
+
+  let pretty = value;
+  try { pretty = JSON.stringify(JSON.parse(value), null, 2); } catch { /* raw */ }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center"
+      style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="flex flex-col rounded-xl overflow-hidden shadow-2xl"
+        style={{
+          width: 'min(700px, 90vw)',
+          height: 'min(520px, 80vh)',
+          backgroundColor: 'var(--vscode-editor-background, #1e1e1e)',
+          border: `1px solid color-mix(in srgb, ${accentColor} 25%, transparent)`,
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-4 py-2.5 border-b flex-shrink-0"
+          style={{ borderColor: `color-mix(in srgb, ${accentColor} 15%, transparent)`, backgroundColor: `color-mix(in srgb, ${accentColor} 6%, transparent)` }}
+        >
+          <span className="text-[11px] font-semibold" style={{ color: accentColor }}>JSON Viewer</span>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-mono text-[var(--color-text-muted)]">{pretty.length.toLocaleString()} chars</span>
+            {/*
+              Wrapping, on by default. A stored payload is one long line per
+              string, and without wrapping the viewer showed the first ninety
+              characters and hid the rest off the right edge. The button is here
+              for the case wrapping gets in the way: comparing indentation down
+              a long structure, where a wrapped line stops lining up.
+            */}
+            <button
+              type="button"
+              onClick={() => setWrap(w => !w)}
+              aria-pressed={wrap}
+              className="w-6 h-6 flex items-center justify-center rounded cursor-pointer transition-colors"
+              style={{
+                color: wrap ? accentColor : 'var(--color-text-muted)',
+                background: wrap ? `color-mix(in srgb, ${accentColor} 14%, transparent)` : 'transparent',
+              }}
+              title={wrap ? 'Wrapping long lines — click for one line each' : 'Long lines run off the edge — click to wrap'}
+            >
+              <I.WrapLines size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-6 h-6 flex items-center justify-center rounded cursor-pointer text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-text-primary)_8%,transparent)] transition-colors"
+              title="Close"
+              aria-label="Close JSON viewer"
+            >
+              <I.Close size={13} />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 min-h-0">
+          <CodeEditor value={pretty.slice(0, 50000)} language="json" readOnly height="100%" wordWrap={wrap} />
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ─── JSON expand cell ─────────────────────────────────────────────────────────
+
+function JsonCell({ value, accentColor }: { value: unknown; accentColor: string }) {
+  const [showPopup, setShowPopup] = useState(false);
+  const str = value == null ? '' : String(value);
+  const isJson = str.startsWith('{') || str.startsWith('[');
+
+  if (!isJson || str.length < 20) {
+    return (
+      <span className="font-mono text-[10px]" style={{ color: str ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
+        {str || <span className="italic text-[var(--color-text-muted)]">null</span>}
+      </span>
+    );
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setShowPopup(true)}
+        className="flex items-center gap-1 cursor-pointer text-[10px] font-mono"
+        style={{ color: accentColor }}
+        title="Click to open JSON viewer"
+      >
+        <I.ChevronRight size={10} />
+        <span className="opacity-70">{`{…} ${str.length} chars`}</span>
+      </button>
+      {showPopup && <JsonPopupModal value={str} accentColor={accentColor} onClose={() => setShowPopup(false)} />}
+    </>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+export function DbExplorerTab() {
+  const [tables, setTables] = useState<TableInfo[]>([]);
+  const [activeTable, setActiveTable] = useState<string | null>(null);
+  const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+  const [columns, setColumns] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadTables = useCallback(() => { post('dbExplorer:getTables'); }, []);
+
+  const loadRows = useCallback((tableName: string) => {
+    setLoading(true);
+    post('dbExplorer:getRows', { tableName, limit: 200 });
+  }, []);
+
+  useEffect(() => {
+    loadTables();
+    const handler = (e: MessageEvent) => {
+      const msg = e.data;
+      if (!msg) return;
+      if (msg.type === 'dbExplorer:tables') setTables(msg.tables ?? []);
+      if (msg.type === 'dbExplorer:rows') {
+        setRows(msg.rows ?? []);
+        setLoading(false);
+        if (Array.isArray(msg.columns) && msg.columns.length) setColumns(msg.columns);
+      }
+      if (msg.type === 'dbExplorer:rowDeleted') { loadTables(); if (activeTable) loadRows(activeTable); }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [loadTables, loadRows, activeTable]);
+
+  useEffect(() => {
+    if (rows.length > 0 && columns.length === 0) setColumns(Object.keys(rows[0]));
+  }, [rows, columns]);
+
+  const selectTable = (name: string) => {
+    logUiEvent('devtools.db_query', { table: name });
+    const tbl = tables.find(t => t.name === name);
+    if (tbl) setColumns(tbl.columns);
+    setActiveTable(name);
+    setRows([]);
+    loadRows(name);
+  };
+
+  /*
+    A row delete is asked about first. It went straight to the database on one
+    click of an 11px icon sitting in every row of a dense grid — no undo, no
+    trash, nothing to recover from. The rows here are the extension's own
+    record of what it did.
+  */
+  const [confirmRow, setConfirmRow] = useState<Record<string, unknown> | null>(null);
+
+  const pkColumn = () =>
+    columns.find(c => c.toLowerCase().includes('id') && c !== 'conversation_id') ?? columns[0];
+
+  const reallyDelete = () => {
+    const row = confirmRow;
+    setConfirmRow(null);
+    if (!row || !activeTable) return;
+    const pkCol = pkColumn();
+    logUiEvent('devtools.db_delete', { table: activeTable, pkCol });
+    post('dbExplorer:deleteRow', { tableName: activeTable, pkCol, pkVal: row[pkCol] });
+  };
+
+  const activeColor = activeTable ? tableColor(activeTable) : '#818cf8';
+
+  return (
+    <div className="flex h-full min-h-0">
+      <ModalView
+        open={!!confirmRow}
+        onClose={() => setConfirmRow(null)}
+        title="Delete this row?"
+        size="sm"
+        footerRight={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <ButtonView variant="secondary" size="sm" onClick={() => setConfirmRow(null)}>Cancel</ButtonView>
+            <ButtonView variant="primary" size="sm" accentColor="var(--color-error)" onClick={reallyDelete}>Delete</ButtonView>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-2 text-[12px]">
+          <span style={{ color: 'var(--color-text-secondary)' }}>
+            This removes one row from <code>{activeTable}</code> and cannot be undone.
+          </span>
+          {/* Which row, by its key — the grid scrolls, and a dialog that only
+              says "this row" leaves you checking behind it. */}
+          {confirmRow && (
+            <span className="font-mono text-[11px] px-2 py-1.5 rounded"
+              style={{ background: 'var(--color-surface-hover)', color: 'var(--color-text-muted)', wordBreak: 'break-all' }}>
+              {pkColumn()}: {String(confirmRow[pkColumn()] ?? '—')}
+            </span>
+          )}
+        </div>
+      </ModalView>
+
+      {/* ─── Left: table list ─── */}
+      <div className="w-[190px] shrink-0 border-r border-[color-mix(in_srgb,var(--color-text-primary)_7%,transparent)] flex flex-col bg-[color-mix(in_srgb,var(--color-text-primary)_1%,transparent)]">
+        <div className="flex items-center justify-between px-3 py-2.5 border-b border-[color-mix(in_srgb,var(--color-text-primary)_7%,transparent)]">
+          <span className="text-[9.5px] font-bold text-[var(--color-text-muted)] uppercase tracking-widest">Tables</span>
+          <button type="button" onClick={loadTables} aria-label="Refresh tables"
+            className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] cursor-pointer transition-colors">
+            <I.Refresh size={11} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] py-1">
+          {tables.map(tbl => {
+            const c = tableColor(tbl.name);
+            const isActive = activeTable === tbl.name;
+            return (
+              <button
+                key={tbl.name}
+                type="button"
+                onClick={() => selectTable(tbl.name)}
+                className="w-full flex items-center justify-between px-3 py-2 text-left cursor-pointer transition-all rounded-lg mx-1 mb-0.5"
+                style={{
+                  width: 'calc(100% - 8px)',
+                  background: isActive ? `color-mix(in srgb, ${c} 12%, transparent)` : 'transparent',
+                  color: isActive ? c : 'var(--color-text-primary)',
+                  borderLeft: isActive ? `2px solid ${c}` : '2px solid transparent',
+                }}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <I.Server size={11} className="shrink-0" style={{ color: c }} />
+                  <span className="text-[11px] truncate font-medium">{tbl.name}</span>
+                </div>
+                <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full shrink-0 ml-1"
+                  style={{ color: c, background: `color-mix(in srgb, ${c} 12%, transparent)` }}>
+                  {tbl.rowCount}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ─── Right: rows ─── */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {!activeTable ? (
+          <div className="flex flex-col items-center justify-center h-full gap-2">
+            <I.Server size={28} className="text-[var(--color-text-muted)] opacity-30" />
+            <span className="text-[11px] text-[var(--color-text-muted)]">Select a table to browse rows</span>
+          </div>
+        ) : loading ? (
+          <div className="flex items-center justify-center h-full text-[11px] text-[var(--color-text-muted)]">Loading…</div>
+        ) : rows.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-[11px] text-[var(--color-text-muted)]">
+            No rows in <code className="ml-1 font-mono" style={{ color: activeColor }}>{activeTable}</code>
+          </div>
+        ) : (
+          <>
+            {/* Table header bar */}
+            <div className="flex items-center gap-2 px-3 py-2 border-b shrink-0"
+              style={{ borderColor: `color-mix(in srgb, ${activeColor} 15%, transparent)`, background: `color-mix(in srgb, ${activeColor} 4%, transparent)` }}>
+              <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: activeColor }}>{activeTable}</span>
+              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full"
+                style={{ color: activeColor, background: `color-mix(in srgb, ${activeColor} 12%, transparent)` }}>
+                {rows.length} rows
+              </span>
+            </div>
+            <div className="flex-1 overflow-auto [scrollbar-gutter:stable]">
+              <table className="w-full text-[10.5px] border-collapse">
+                <thead className="sticky top-0 z-10 bg-[var(--color-surface)]">
+                  <tr>
+                    {columns.map((col, i) => (
+                      <th key={col}
+                        className="text-left px-3 py-2 font-semibold whitespace-nowrap border-b"
+                        style={{
+                          color: i === 0 ? activeColor : 'var(--color-text-muted)',
+                          borderColor: `color-mix(in srgb, ${activeColor} 12%, transparent)`,
+                        }}>
+                        {col}
+                      </th>
+                    ))}
+                    <th className="w-[28px] border-b" style={{ borderColor: `color-mix(in srgb, ${activeColor} 12%, transparent)` }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, i) => (
+                    <tr key={i}
+                      className="border-b transition-colors"
+                      style={{ borderColor: 'color-mix(in srgb, var(--color-text-primary) 3%, transparent)' }}
+                      onMouseEnter={ev => (ev.currentTarget as HTMLElement).style.background = `color-mix(in srgb, ${activeColor} 3%, transparent)`}
+                      onMouseLeave={ev => (ev.currentTarget as HTMLElement).style.background = ''}
+                    >
+                      {columns.map((col, ci) => (
+                        <td key={col} className="px-3 py-1.5 align-top max-w-[200px]">
+                          <JsonCell value={row[col]} accentColor={ci === 0 ? activeColor : '#818cf8'} />
+                        </td>
+                      ))}
+                      <td className="px-2 py-1.5 text-right align-top">
+                        <button type="button" onClick={() => setConfirmRow(row)} title="Delete row" aria-label="Delete row"
+                          className="text-[var(--color-text-muted)] hover:text-[#ef4444] cursor-pointer transition-colors">
+                          <I.Trash size={11} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

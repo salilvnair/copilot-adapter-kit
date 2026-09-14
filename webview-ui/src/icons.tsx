@@ -14,10 +14,12 @@ export interface IconProps {
   /** Stroke weight. The mock uses 2 for controls, 1.8 for nav, 2.4 for accents. */
   width?: number;
   className?: string;
+  /** Colour and transforms are set per use — a chevron rotates, a badge tints. */
+  style?: React.CSSProperties;
 }
 
 function svg(path: React.ReactNode, defaultStroke = 2) {
-  return function Icon({ size = 13, width = defaultStroke, className }: IconProps) {
+  return function Icon({ size = 13, width = defaultStroke, className, style }: IconProps) {
     return (
       <svg
         width={size}
@@ -29,6 +31,7 @@ function svg(path: React.ReactNode, defaultStroke = 2) {
         strokeLinecap="round"
         strokeLinejoin="round"
         className={className}
+        style={style}
         aria-hidden="true"
         focusable="false"
       >
@@ -222,4 +225,28 @@ export const Gear = svg(
     <circle cx="12" cy="12" r="3" />
     <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" />
   </>,
+);
+
+/* ── Developer Tools ──────────────────────────────────────────────────────── */
+
+/** Rotated by its caller: 0deg collapsed, 90deg open. */
+export const ChevronRight = svg(<path d="m9 18 6-6-6-6" />, 2.6);
+
+export const Server = svg(
+  <>
+    <ellipse cx="12" cy="5" rx="8" ry="3" />
+    <path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
+    <path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
+  </>,
+  1.8,
+);
+
+export const WrapLines = svg(
+  <>
+    <path d="M3 6h18" />
+    <path d="M3 12h13a3 3 0 0 1 0 6h-3" />
+    <path d="m15 15-2 3 2 3" />
+    <path d="M3 18h4" />
+  </>,
+  1.9,
 );

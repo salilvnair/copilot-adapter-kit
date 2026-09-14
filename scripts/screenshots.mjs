@@ -114,14 +114,26 @@ async function capturePanel(browser) {
   await snap('json-settings');
   await go('Request Dumps');
   await snap('request-dumps');
-  await go('Audit Log');
-  await snap('audit-log');
-  await page.locator('.audit-row').filter({ hasText: 'REFUSED' }).first().click();
-  await page.waitForTimeout(350);
-  await snap('audit-log-expanded');
+  // Developer Tools — one shot per tab, and one of a record opened.
+  await go('Developer Tools');
+  await page.getByRole('tab', { name: 'Audit Log' }).waitFor();
+  await page.waitForTimeout(400);
+  await snap('devtools-audit-log');
+  await page.locator('tbody tr').filter({ hasText: 'Daily token budget reached' }).first().click();
+  // The metadata block mounts Monaco on demand; wait for the gutter.
+  await page.locator('.monaco-editor').first().waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(500);
+  await snap('devtools-audit-log-expanded');
 
-  await go('Dev Tools');
-  await snap('dev-tools');
+  await page.getByRole('tab', { name: 'Audit Config' }).click();
+  await page.waitForTimeout(350);
+  await snap('devtools-audit-config');
+
+  await page.getByRole('tab', { name: 'DB Explorer' }).click();
+  await page.waitForTimeout(300);
+  await page.getByRole('button', { name: /cak_audit/ }).click();
+  await page.waitForTimeout(400);
+  await snap('devtools-db-explorer');
   await go('Bin');
   await snap('bin');
   await go('Danger Zone');
