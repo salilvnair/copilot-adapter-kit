@@ -252,6 +252,45 @@ test.describe('Spend Guard', () => {
     expect(await postTypes(page)).toContain('saveConfig');
   });
 
+  test('a limit can be typed, not only stepped', async ({ page }) => {
+    // Reaching 393,216 by clicking + in 250K steps is not reaching it.
+    await goTo(page, 'Spend Guard');
+    const field = page.getByLabel('Daily tokens value');
+    await expect(field).toHaveValue('2.00M');
+
+    await field.click();
+    await expect(field, 'focus shows the raw number — "2.00M" has no digits to edit')
+      .toHaveValue('2000000');
+
+    await clearPosts(page);
+    await field.fill('393216');
+    await field.press('Enter');
+    const saved = (await posts(page)).find(m => m.type === 'saveConfig');
+    expect(saved!.payload).toEqual({ key: 'budget.dailyTokenLimit', value: 393216 });
+  });
+
+  test('a formatted figure can be typed back in', async ({ page }) => {
+    await goTo(page, 'Spend Guard');
+    const field = page.getByLabel('Daily cost value');
+    await field.click();
+    await clearPosts(page);
+    await field.fill('$12.50');
+    await field.press('Enter');
+    const saved = (await posts(page)).find(m => m.type === 'saveConfig');
+    expect(saved!.payload).toEqual({ key: 'budget.dailyCostLimitUsd', value: 12 });
+  });
+
+  test('Escape abandons an edit', async ({ page }) => {
+    await goTo(page, 'Spend Guard');
+    const field = page.getByLabel('Daily tokens value');
+    await field.click();
+    await field.fill('1');
+    await clearPosts(page);
+    await field.press('Escape');
+    expect(await postTypes(page)).not.toContain('saveConfig');
+    await expect(field).toHaveValue('2.00M');
+  });
+
   test('disabling protection needs a real hold, not a click', async ({ page }) => {
     await goTo(page, 'Spend Guard');
     const hold = page.locator('.hold-b').first();

@@ -46,7 +46,7 @@ export function DevTools({ state }: { state: AppState }) {
   // saying so once beats three tabs each failing in their own way.
   if (state.audit && !state.audit.ok) {
     return (
-      <div className="flex flex-col h-full min-h-0 items-center justify-center gap-2 px-8">
+      <div className="set-main-bleed flex flex-col min-h-0 overflow-hidden items-center justify-center gap-2 px-8">
         <div style={{
           border: '1px solid rgba(245,158,11,.35)', background: 'rgba(245,158,11,.08)',
           borderRadius: 9, padding: '11px 13px', display: 'flex', gap: 9, alignItems: 'flex-start', maxWidth: 520,
@@ -65,7 +65,7 @@ export function DevTools({ state }: { state: AppState }) {
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="set-main-bleed flex flex-col min-h-0 overflow-hidden">
       {/* Sub-tab bar */}
       <div className="px-3 pt-2 pb-0 border-b border-[var(--color-surface-border)] shrink-0">
         <TabView

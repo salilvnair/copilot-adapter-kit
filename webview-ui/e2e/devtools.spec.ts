@@ -164,3 +164,59 @@ test.describe('DB Explorer', () => {
     expect(await postTypes(page)).toContain('dbExplorer:deleteRow');
   });
 });
+
+test.describe('The screen fits the window', () => {
+  test('a long list scrolls instead of running off the bottom', async ({ page }) => {
+    // #root was min-height:100%, so a long screen grew the page while
+    // .stage-wrap clipped it: a list with no scrollbar and no end.
+    await page.setViewportSize({ width: 1400, height: 800 });
+    await page.getByRole('tab', { name: 'Audit Config' }).click();
+    await page.locator('[aria-label="Enable all Providers"], [aria-label="Disable all Providers"]').first().waitFor();
+
+    const box = await page.evaluate(() => {
+      const root = document.getElementById('root')!;
+      const list = [...document.querySelectorAll('div')]
+        .find(e => e.className.includes('overflow-y-auto')) as HTMLElement;
+      return {
+        rootGrew: root.scrollHeight > root.getBoundingClientRect().height + 1,
+        listScrolls: list.scrollHeight > list.getBoundingClientRect().height + 1,
+      };
+    });
+    expect(box.rootGrew, 'the page itself must not grow past the window').toBe(false);
+    expect(box.listScrolls, 'the list must be the thing that scrolls').toBe(true);
+  });
+
+  test('every tab stays inside the window', async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 800 });
+    for (const tab of ['Audit Log', 'Audit Config', 'DB Explorer']) {
+      await page.getByRole('tab', { name: tab }).click();
+      await page.waitForTimeout(200);
+      const grew = await page.evaluate(() => {
+        const r = document.getElementById('root')!;
+        return r.scrollHeight > r.getBoundingClientRect().height + 1;
+      });
+      expect(grew, `${tab} grew the page`).toBe(false);
+    }
+  });
+});
+
+test.describe('Records are shown whole', () => {
+  test('a payload wraps by default, and the toggle turns it off', async ({ page }) => {
+    await page.locator('tbody tr', { hasText: 'Write a conventional commit' }).first().click();
+    await page.locator('.monaco-editor').first().waitFor({ timeout: 30_000 });
+
+    const wrap = page.getByLabel('Wrap USER PROMPT');
+    await expect(wrap).toHaveAttribute('aria-pressed', 'true');
+    await wrap.click();
+    await expect(wrap).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('the whole body is rendered, not the first few thousand characters', async ({ page }) => {
+    await page.locator('tbody tr', { hasText: 'Write a conventional commit' }).first().click();
+    await page.locator('.monaco-editor').first().waitFor({ timeout: 30_000 });
+    // The character count beside each label is the length actually handed to
+    // the editor; a clipped body would report the clip, not the record.
+    await expect(page.getByText(/^\d[\d,]* chars$/).first()).toBeVisible();
+    await expect(page.getByText(/truncated/)).toHaveCount(0);
+  });
+});

@@ -19,8 +19,18 @@ import type { Interceptor } from '../mesh/pipeline';
 import { insertAudit } from '../storage/db';
 import { estimatePayloadTokens, tokenMath } from '../tooling/token-math';
 
-/** Bodies are clipped so one long response cannot fill the database. */
-const MAX_BODY_CHARS = 8_000;
+/*
+  Bodies are recorded whole.
+
+  They used to be clipped at 8,000 characters, which is shorter than most system
+  prompts — so the one thing you turn body recording ON for, reading what was
+  actually sent, was the thing you could not read. A truncated audit record
+  answers "roughly what was sent", and roughly is not what an audit is for.
+
+  This is still off by default (`audit.recordBodies`), because the payload is
+  your source code; what changed is that turning it on now means all of it.
+  `audit.retentionDays` is what keeps the database from growing forever.
+*/
 
 export class AuditRecorder implements Interceptor {
   async intercept(
@@ -58,10 +68,10 @@ export class AuditRecorder implements Interceptor {
         stage,
         provider: payload._budget?.pickerId?.split(':')[0],
         model: payload.model,
-        system_prompt: withBodies ? _clip(_systemOf(payload)) : undefined,
-        user_prompt: withBodies ? _clip(_lastUserOf(payload)) : undefined,
-        request_payload: withBodies ? _clip(JSON.stringify(payload.messages)) : undefined,
-        response_payload: withBodies ? _clip(answer) : undefined,
+        system_prompt: withBodies ? _orUndefined(_systemOf(payload)) : undefined,
+        user_prompt: withBodies ? _orUndefined(_lastUserOf(payload)) : undefined,
+        request_payload: withBodies ? JSON.stringify(payload.messages) : undefined,
+        response_payload: withBodies ? _orUndefined(answer) : undefined,
         // Never the key, and never a header that could carry one.
         headers: JSON.stringify({ apiPath: payload.apiPath ?? '/chat/completions' }),
         meta: JSON.stringify({
@@ -85,7 +95,7 @@ export class AuditRecorder implements Interceptor {
     sink.onReport = u => { usage = u; origReport?.(u); };
 
     const origToken = sink.onToken;
-    sink.onToken = t => { if (withBodies && answer.length < MAX_BODY_CHARS) answer += t; origToken(t); };
+    sink.onToken = t => { if (withBodies) answer += t; origToken(t); };
 
     const origComplete = sink.onComplete;
     sink.onComplete = () => { commit('chat.complete'); origComplete(); };
@@ -123,9 +133,7 @@ function _lastUserOf(payload: Payload): string {
   return typeof last.content === 'string' ? last.content : JSON.stringify(last.content);
 }
 
-function _clip(text: string | undefined): string | undefined {
-  if (!text) return undefined;
-  return text.length <= MAX_BODY_CHARS
-    ? text
-    : `${text.slice(0, MAX_BODY_CHARS)}\n… truncated, ${text.length - MAX_BODY_CHARS} more characters`;
+/** An empty body is absent rather than an empty string. */
+function _orUndefined(text: string | undefined): string | undefined {
+  return text ? text : undefined;
 }

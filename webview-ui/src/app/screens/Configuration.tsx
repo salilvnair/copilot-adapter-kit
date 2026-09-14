@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import * as I from '../../icons';
 import { Card, Chip, IconBtn, PageHead, SectionTitle, Segmented, SettingRow, Slider, Stepper, Switch } from '../../ui';
-import { actions, type AppState } from '../state';
+import { actions, type AppState , parseTokens} from '../state';
 
 type Tab = 'general' | 'prompts' | 'vision';
 
@@ -63,6 +63,10 @@ function General({ state }: { state: AppState }) {
           <Stepper
             label="Max output tokens"
             value={state.maxTokens > 0 ? _k(state.maxTokens) : 'model'}
+            num={state.maxTokens}
+            onSet={n => set('maxTokens', n)}
+            format={n => (n > 0 ? _k(n) : 'model')}
+            parse={parseTokens}
             onDec={() => set('maxTokens', Math.max(0, state.maxTokens - 4096))}
             onInc={() => set('maxTokens', state.maxTokens + 4096)}
           />
@@ -107,6 +111,10 @@ function General({ state }: { state: AppState }) {
           <Stepper
             label="Diff threshold"
             value={`${state.maxDiffFiles ?? 500} files`}
+            num={state.maxDiffFiles ?? 500}
+            onSet={n => set('maxDiffFiles', Math.max(1, n))}
+            format={n => `${n} files`}
+            parse={t => parseInt(t, 10)}
             onDec={() => set('maxDiffFiles', Math.max(10, (state.maxDiffFiles ?? 500) - 50))}
             onInc={() => set('maxDiffFiles', (state.maxDiffFiles ?? 500) + 50)}
           />

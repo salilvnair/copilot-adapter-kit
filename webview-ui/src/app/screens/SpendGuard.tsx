@@ -12,7 +12,7 @@ import * as I from '../../icons';
 import { Btn, Card, Chip, IconBtn, Meter, PageHead, Segmented, SettingRow, Stepper, Tile } from '../../ui';
 import { BurnChart } from '../BurnChart';
 import { HoldToConfirm } from '../HoldToConfirm';
-import { actions, fmtTokens, type AppState, type BudgetSnapshot } from '../state';
+import { actions, fmtTokens, parseTokens, parseUsd, type AppState, type BudgetSnapshot } from '../state';
 
 export function SpendGuard({ state, standalone = false }: { state: AppState; standalone?: boolean }) {
   const [tab, setTab] = useState<'today' | 'history'>('today');
@@ -200,6 +200,10 @@ function Limits({ b }: { b: BudgetSnapshot }) {
         <Stepper
           label="Daily tokens"
           value={c.dailyTokenLimit > 0 ? fmtTokens(c.dailyTokenLimit) : 'off'}
+          num={c.dailyTokenLimit}
+          onSet={n => set('dailyTokenLimit', n)}
+          format={n => (n > 0 ? fmtTokens(n) : 'off')}
+          parse={parseTokens}
           onDec={() => set('dailyTokenLimit', Math.max(0, c.dailyTokenLimit - 250_000))}
           onInc={() => set('dailyTokenLimit', c.dailyTokenLimit + 250_000)}
         />
@@ -214,6 +218,10 @@ function Limits({ b }: { b: BudgetSnapshot }) {
         <Stepper
           label="Daily cost"
           value={c.dailyCostLimitUsd > 0 ? `$${c.dailyCostLimitUsd.toFixed(2)}` : 'off'}
+          num={c.dailyCostLimitUsd}
+          onSet={n => set('dailyCostLimitUsd', n)}
+          format={n => (n > 0 ? `$${n.toFixed(2)}` : 'off')}
+          parse={parseUsd}
           onDec={() => set('dailyCostLimitUsd', Math.max(0, c.dailyCostLimitUsd - 5))}
           onInc={() => set('dailyCostLimitUsd', c.dailyCostLimitUsd + 5)}
         />
@@ -226,6 +234,10 @@ function Limits({ b }: { b: BudgetSnapshot }) {
         <Stepper
           label="Input per request"
           value={c.maxInputTokensPerRequest > 0 ? fmtTokens(c.maxInputTokensPerRequest) : 'off'}
+          num={c.maxInputTokensPerRequest}
+          onSet={n => set('maxInputTokensPerRequest', n)}
+          format={n => (n > 0 ? fmtTokens(n) : 'off')}
+          parse={parseTokens}
           onDec={() => set('maxInputTokensPerRequest', Math.max(0, c.maxInputTokensPerRequest - 25_000))}
           onInc={() => set('maxInputTokensPerRequest', c.maxInputTokensPerRequest + 25_000)}
         />
@@ -238,6 +250,10 @@ function Limits({ b }: { b: BudgetSnapshot }) {
         <Stepper
           label="Output per request"
           value={c.maxOutputTokens > 0 ? fmtTokens(c.maxOutputTokens) : 'model'}
+          num={c.maxOutputTokens}
+          onSet={n => set('maxOutputTokens', n)}
+          format={n => (n > 0 ? fmtTokens(n) : 'model')}
+          parse={parseTokens}
           onDec={() => set('maxOutputTokens', Math.max(0, c.maxOutputTokens - 4096))}
           onInc={() => set('maxOutputTokens', c.maxOutputTokens + 4096)}
         />
@@ -250,6 +266,9 @@ function Limits({ b }: { b: BudgetSnapshot }) {
         <Stepper
           label="Turns per conversation"
           value={c.maxTurnsPerConversation > 0 ? c.maxTurnsPerConversation : 'off'}
+          num={c.maxTurnsPerConversation}
+          onSet={n => set('maxTurnsPerConversation', n)}
+          format={n => (n > 0 ? String(n) : 'off')}
           onDec={() => set('maxTurnsPerConversation', Math.max(0, c.maxTurnsPerConversation - 10))}
           onInc={() => set('maxTurnsPerConversation', c.maxTurnsPerConversation + 10)}
         />

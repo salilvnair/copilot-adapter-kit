@@ -8,8 +8,23 @@ import * as I from '../icons';
 import { Btn, Chip, CloseBtn, Field, SectionTitle, Segmented, SettingRow, Stepper } from '../ui';
 import { actions, mark, type AppState, type ModelCfg } from './state';
 
-const CONTEXT = [4096, 8192, 16384, 32768, 65536, 128000, 200000, 400000, 1000000];
-const OUTPUT = [4096, 8192, 16384, 32768, 65536, 128000];
+/*
+  The sizes providers actually publish, rather than a ladder of powers of two.
+
+  Context: 128K is the long-standing OpenAI-compatible default, 200K is Claude
+  Haiku 4.5, 256K and 400K are common on open-weight and hosted models, 1M is
+  the Claude 5 family, Gemini and DeepSeek's current models, 2M is Gemini's
+  long-context tier.
+
+  Output: 64K is Gemini Flash, Claude Haiku 4.5 and DeepSeek's thinking default;
+  128K is Claude Opus/Sonnet 5 and the current GPT-5/6 line; 300K is Anthropic's
+  batch beta; 393216 is DeepSeek's max_tokens ceiling — 384K, and the number
+  that prompted this list, because the ladder used to stop at 128K.
+
+  No ladder covers every model, so Custom sits at the end of both.
+*/
+const CONTEXT = [4096, 8192, 16384, 32768, 65536, 128000, 200000, 256000, 400000, 1000000, 2000000];
+const OUTPUT = [4096, 8192, 16384, 32768, 65536, 100000, 128000, 200000, 300000, 393216];
 
 export function ModelDrawer({
   state, parentUuid, model, close,
@@ -92,22 +107,8 @@ export function ModelDrawer({
         </Field>
 
         <SectionTitle right={<span className="mono">{_k(maxIn)} → {_k(maxOut)}</span>}>Window</SectionTitle>
-        <Field label="Context">
-          <Segmented
-            value={String(maxIn)}
-            onChange={v => setMaxIn(Number(v))}
-            options={CONTEXT.map(v => ({ value: String(v), label: _k(v) }))}
-            className="wrap"
-          />
-        </Field>
-        <Field label="Max output">
-          <Segmented
-            value={String(maxOut)}
-            onChange={v => setMaxOut(Number(v))}
-            options={OUTPUT.map(v => ({ value: String(v), label: _k(v) }))}
-            className="wrap"
-          />
-        </Field>
+        <TokenField label="Context" value={maxIn} onChange={setMaxIn} presets={CONTEXT} />
+        <TokenField label="Max output" value={maxOut} onChange={setMaxOut} presets={OUTPUT} />
 
         <SectionTitle>Capabilities</SectionTitle>
         <div>
@@ -126,6 +127,8 @@ export function ModelDrawer({
             <Stepper
               label="Parallel tool calls"
               value={tools}
+              num={tools}
+              onSet={n => setTools(Math.min(512, Math.max(0, n)))}
               onDec={() => setTools(v => Math.max(0, v - 16))}
               onInc={() => setTools(v => Math.min(512, v + 16))}
             />
@@ -192,6 +195,53 @@ export function ModelDrawer({
         <Btn variant="pri" style={{ marginLeft: 'auto' }} onClick={save} disabled={!id.trim()}>Save</Btn>
       </div>
     </aside>
+  );
+}
+
+/**
+ * A size, as presets plus an exact figure when none of them fits.
+ *
+ * A value that is not on the ladder selects Custom and shows the number, so a
+ * model editor opened on a figure typed months ago still shows that figure
+ * rather than silently rounding it to the nearest chip.
+ */
+function TokenField({ label, value, onChange, presets }: {
+  label: string; value: number; onChange: (n: number) => void; presets: number[];
+}) {
+  const known = presets.includes(value);
+  const [custom, setCustom] = useState(!known);
+  const showInput = custom || !known;
+
+  return (
+    <Field label={label}>
+      <Segmented
+        value={showInput ? 'custom' : String(value)}
+        onChange={v => {
+          if (v === 'custom') { setCustom(true); return; }
+          setCustom(false);
+          onChange(Number(v));
+        }}
+        options={[
+          ...presets.map(v => ({ value: String(v), label: _k(v) })),
+          { value: 'custom', label: 'Custom' },
+        ]}
+        className="wrap"
+      />
+      {showInput && (
+        <div className="inp mono" style={{ marginTop: 6 }}>
+          <input
+            type="number"
+            min={1}
+            step={1024}
+            value={value || ''}
+            onChange={e => onChange(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+            aria-label={`${label} in tokens`}
+            placeholder="393216"
+          />
+          <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--c-muted)' }}>tokens</span>
+        </div>
+      )}
+    </Field>
   );
 }
 

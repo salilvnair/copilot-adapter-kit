@@ -28,6 +28,9 @@ interface Props {
   placeholder?: string;
   height?: string;
   className?: string;
+  /** On by default: a stored payload is one very long line per string, and
+   *  without wrapping you read the first ninety characters of it and nothing
+   *  else. Every caller can still turn it off for comparing indentation. */
   wordWrap?: boolean;
   fontSize?: number;
 }
@@ -55,7 +58,7 @@ export function CodeEditor({
   placeholder,
   height = '200px',
   className = '',
-  wordWrap = false,
+  wordWrap = true,
   fontSize = 12,
 }: Props) {
   return (

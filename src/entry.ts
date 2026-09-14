@@ -140,17 +140,25 @@ const CONTEXT_SIZES = [
   { label: '64K',  value: 65536 },
   { label: '128K', value: 128000 },
   { label: '200K', value: 200000 },
+  { label: '256K', value: 256000 },
   { label: '400K', value: 400000 },
   { label: '1M',   value: 1000000 },
+  { label: '2M',   value: 2000000 },
 ];
 
+// The sizes providers actually publish. 393216 is DeepSeek's max_tokens
+// ceiling — 384K — and the reason this list no longer stops at 128K.
 const OUTPUT_SIZES = [
   { label: '4K',   value: 4096 },
   { label: '8K',   value: 8192 },
   { label: '16K',  value: 16384 },
   { label: '32K',  value: 32768 },
   { label: '64K',  value: 65536 },
+  { label: '100K', value: 100000 },
   { label: '128K', value: 128000 },
+  { label: '200K', value: 200000 },
+  { label: '300K', value: 300000 },
+  { label: '393K', value: 393216 },
 ];
 
 const TOOL_SIZES = [

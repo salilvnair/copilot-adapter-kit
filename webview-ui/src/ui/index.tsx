@@ -9,6 +9,7 @@
  * ───────────────────────────────────────────────────────────────────────────── */
 
 import { ButtonView, IconButtonView } from '@salilvnair/dui';
+import { useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
 type Kids = { children?: ReactNode; className?: string; style?: CSSProperties };
@@ -267,10 +268,68 @@ export function Switch({ on, onChange, label }: { on: boolean; onChange?: (next:
   );
 }
 
-export function Stepper({ value, onDec, onInc, label }: { value: ReactNode; onDec?: () => void; onInc?: () => void; label: string }) {
+/**
+ * A number with − and +, and the number itself typeable.
+ *
+ * It used to be read-only text: getting from the default to 393,216 meant
+ * clicking + ninety-six times, and there was no way to say a figure the step
+ * size cannot land on. Pass `num` and `onSet` to make the value an input;
+ * without them it stays a plain readout.
+ *
+ * While focused the field shows the raw number, because "2.00M" is not
+ * something you can edit a digit of. Blur or Enter commits, Escape abandons.
+ */
+export function Stepper({
+  value, onDec, onInc, label, num, onSet, format, parse,
+}: {
+  value: ReactNode;
+  onDec?: () => void;
+  onInc?: () => void;
+  label: string;
+  /** The raw value, when it should be editable. */
+  num?: number;
+  onSet?: (n: number) => void;
+  /** How the raw value reads when the field is not focused. */
+  format?: (n: number) => string;
+  /** How typed text becomes a number. Defaults to Number(). */
+  parse?: (text: string) => number;
+}) {
+  const editable = typeof num === 'number' && !!onSet;
+  const [draft, setDraft] = useState<string | null>(null);
+  /* Escape blurs the field, and blur commits. Clearing the draft in state is
+     too late — React has not re-rendered by the time onBlur runs — so the
+     abandon is recorded in a ref the commit checks. */
+  const abandoned = useRef(false);
+
+  const commit = () => {
+    if (abandoned.current) { abandoned.current = false; setDraft(null); return; }
+    if (draft === null) return;
+    const n = parse ? parse(draft) : Number(draft);
+    setDraft(null);
+    if (Number.isFinite(n) && n >= 0) onSet!(Math.floor(n));
+  };
+
   return (
     <span className="stepper" role="group" aria-label={label}>
-      <span className="v mono">{value}</span>
+      {editable ? (
+        <input
+          className="v mono stepper-in"
+          inputMode="numeric"
+          value={draft ?? (format ? format(num!) : String(num))}
+          onChange={e => setDraft(e.target.value)}
+          onFocus={() => setDraft(String(num))}
+          onBlur={commit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') e.currentTarget.blur();
+            if (e.key === 'Escape') { abandoned.current = true; e.currentTarget.blur(); }
+          }}
+          // The group already carries `label`; repeating it here would leave
+          // two controls answering to the same name.
+          aria-label={`${label} value`}
+        />
+      ) : (
+        <span className="v mono">{value}</span>
+      )}
       <button type="button" className="b" onClick={onDec} aria-label={`Decrease ${label}`}>
         &minus;
       </button>

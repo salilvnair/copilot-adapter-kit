@@ -90,7 +90,7 @@ function JsonPopupModal({ value, accentColor, onClose }: { value: string; accent
           </div>
         </div>
         <div className="flex-1 min-h-0">
-          <CodeEditor value={pretty.slice(0, 50000)} language="json" readOnly height="100%" wordWrap={wrap} />
+          <CodeEditor value={pretty} language="json" readOnly height="100%" wordWrap={wrap} />
         </div>
       </div>
     </div>,

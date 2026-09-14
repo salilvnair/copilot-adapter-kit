@@ -92,6 +92,11 @@ p{margin:0}
   background:var(--c-input-bg);height:26px;overflow:hidden;flex:none}
 .dui.is-light .stepper{background:#fff}
 .stepper .v{padding:0 10px;font-size:12px;min-width:62px;text-align:right}
+.stepper .v.stepper-in{background:transparent;border:0;outline:0;color:inherit;font:inherit;
+  width:72px;min-width:0;padding:0 10px;text-align:right;-moz-appearance:textfield}
+.stepper .v.stepper-in::-webkit-inner-spin-button,
+.stepper .v.stepper-in::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.stepper:focus-within{border-color:var(--c-primary)}
 .stepper .b{width:22px;display:grid;place-items:center;color:var(--c-muted);border-left:1px solid var(--c-surface-border);font-size:12px}
 table.models{width:100%;border-collapse:collapse;font-size:12px}
 table.models th{text-align:left;font-weight:500;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
@@ -421,7 +426,14 @@ table.models .num{text-align:right}
 /* The webview fills the panel; the mock's frames were fixed-height stages. */
 html,body{height:100%}
 body.dui{margin:0;background:var(--c-panel)}
-#root{min-height:100%;display:flex;flex-direction:column}
+/* The app is the viewport, not the content.
+ *
+ * This was min-height:100%, so a long screen grew #root, grew .set-shell with
+ * it, and .stage-wrap's overflow:hidden then clipped the bottom — a list that
+ * ran past the window with nothing to scroll. Every inner scroll region here
+ * (.set-main, the Developer Tools tabs) relies on an ancestor that stops at
+ * the window edge. */
+#root{height:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 /* A chip placed directly in a column container would stretch; the mock always
  * nests them in a row. This keeps a standalone one at its content width. */
 .dui .chip.self-start{align-self:flex-start}
@@ -473,6 +485,12 @@ body.dui{margin:0;background:var(--c-panel)}
   border-left:1px solid var(--c-surface-border);
 }
 .dui .set-main.in-split{width:100%;height:100%}
+
+/* A screen that owns its own chrome — its own tab strip, toolbars and scroll
+ * regions — so it takes .set-main's containment without its padding. Without
+ * this the grid row grows to the content and the page scrolls behind a
+ * container that clips it: a list with no scrollbar and no bottom. */
+.dui .set-main-bleed{height:100%;min-height:0;min-width:0;overflow:hidden}
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Close marks. One treatment everywhere an X appears: smaller than a normal

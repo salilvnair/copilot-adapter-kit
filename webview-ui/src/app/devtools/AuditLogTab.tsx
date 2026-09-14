@@ -135,6 +135,7 @@ function PayloadBlock({ label, value, color, lang = 'plaintext' }: {
   label: string; value: string | null | undefined; color: string; lang?: CodeLanguage;
 }) {
   const [height, setHeight] = useState(DEFAULT_PAYLOAD_HEIGHT);
+  const [wrap, setWrap] = useState(true);
   const isDragging = useRef(false);
   const startY = useRef(0);
   const startH = useRef(0);
@@ -164,12 +165,34 @@ function PayloadBlock({ label, value, color, lang = 'plaintext' }: {
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded self-start"
-        style={{ color, backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)` }}>
-        {label}
-      </span>
+      <div className="flex items-center gap-2">
+        <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded"
+          style={{ color, backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)` }}>
+          {label}
+        </span>
+        <span className="text-[9px] font-mono" style={{ color: 'var(--color-text-muted)' }}>
+          {display.length.toLocaleString()} chars
+        </span>
+        <button
+          type="button"
+          onClick={() => setWrap(w => !w)}
+          aria-pressed={wrap}
+          className="ml-auto w-5 h-5 flex items-center justify-center rounded cursor-pointer transition-colors"
+          style={{
+            color: wrap ? color : 'var(--color-text-muted)',
+            background: wrap ? `color-mix(in srgb, ${color} 14%, transparent)` : 'transparent',
+          }}
+          title={wrap ? 'Wrapping long lines — click for one line each' : 'Long lines run off the edge — click to wrap'}
+          aria-label={`Wrap ${label}`}
+        >
+          <I.WrapLines size={11} />
+        </button>
+      </div>
       <div className="rounded-lg overflow-hidden border relative" style={{ borderColor: `color-mix(in srgb, ${color} 15%, transparent)` }}>
-        <CodeEditor value={display.slice(0, 6000)} language={language} readOnly height={`${height}px`} />
+        {/* Whole, not the first 6,000 characters. The block scrolls and the
+            handle below resizes it; a record you cannot read to the end of is
+            not a record. */}
+        <CodeEditor value={display} language={language} readOnly height={`${height}px`} wordWrap={wrap} />
         <div onMouseDown={handleDragStart}
           className="absolute bottom-0 left-0 right-0 h-[7px] flex items-center justify-center select-none z-10"
           style={{ cursor: 'ns-resize', backgroundColor: `color-mix(in srgb, ${color} 8%, var(--color-surface))`, borderTop: `1px solid color-mix(in srgb, ${color} 20%, transparent)` }}

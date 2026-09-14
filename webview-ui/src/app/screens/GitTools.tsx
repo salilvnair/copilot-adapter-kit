@@ -47,6 +47,10 @@ export function GitTools({ state }: { state: AppState }) {
             <Stepper
               label="Diff threshold"
               value={`${threshold} files`}
+              num={threshold}
+              onSet={n => actions.saveConfig('maxDiffFiles', Math.max(1, n))}
+              format={n => `${n} files`}
+              parse={t => parseInt(t, 10)}
               onDec={() => actions.saveConfig('maxDiffFiles', Math.max(10, threshold - 50))}
               onInc={() => actions.saveConfig('maxDiffFiles', threshold + 50)}
             />

@@ -278,3 +278,27 @@ export function fmtTokens(n: number): string {
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
   return String(Math.round(n));
 }
+
+/**
+ * A token count typed by hand: "393216", "393k", "2M", "1 000 000".
+ *
+ * The steppers show "2.00M", so the field has to read back what it shows as
+ * well as a plain number — otherwise editing one digit of a formatted value
+ * silently means something else.
+ */
+export function parseTokens(text: string): number {
+  const t = String(text).trim().replace(/[\s,_]/g, '').toLowerCase();
+  if (!t) return 0;
+  const m = t.match(/^([\d.]+)([kmb])?$/);
+  if (!m) return NaN;
+  const n = parseFloat(m[1]);
+  if (!Number.isFinite(n)) return NaN;
+  const scale = m[2] === 'b' ? 1e9 : m[2] === 'm' ? 1e6 : m[2] === 'k' ? 1e3 : 1;
+  return Math.round(n * scale);
+}
+
+/** The same, for a money field: "$5.00", "5", "12.50". */
+export function parseUsd(text: string): number {
+  const n = parseFloat(String(text).replace(/[$,\s]/g, ''));
+  return Number.isFinite(n) ? n : NaN;
+}

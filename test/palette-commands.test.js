@@ -238,6 +238,52 @@ vscodeStub.commands.registerCommand = (id, run) => { registered.set(id, run); re
     check('entry.ts is emoji-free', emoji.length === 0, emoji.join(' '));
   }
 
+  console.log('\n=== 6. the size ladders agree, and reach what models publish ===');
+  {
+    /*
+      Two lists of the same thing, one per surface, because the panel and the
+      extension host are separate builds. They drifted: both stopped at 128K
+      for output while DeepSeek's max_tokens ceiling is 393,216 — so a model
+      could not be described at the size it actually runs at.
+    */
+    const fs2 = require('fs');
+    const host = fs2.readFileSync(path.join(ROOT, 'src/entry.ts'), 'utf-8');
+    const panel = fs2.readFileSync(path.join(ROOT, 'webview-ui/src/app/ModelDrawer.tsx'), 'utf-8');
+
+    const after = (src, needle) => src.slice(src.indexOf(needle));
+    const hostList = name => {
+      const block = after(host, 'const ' + name + ' = [');
+      return [...block.slice(0, block.indexOf(']')).matchAll(/value:\s*(\d+)/g)].map(m => Number(m[1]));
+    };
+    const panelList = name => {
+      const block = after(panel, 'const ' + name + ' = [');
+      return (block.slice(0, block.indexOf(']')).match(/\d+/g) || []).map(Number);
+    };
+
+    const ctxHost = hostList('CONTEXT_SIZES'), ctxPanel = panelList('CONTEXT');
+    const outHost = hostList('OUTPUT_SIZES'), outPanel = panelList('OUTPUT');
+
+    check('context ladders match across the two surfaces',
+      JSON.stringify(ctxHost) === JSON.stringify(ctxPanel),
+      JSON.stringify(ctxHost) + '  vs  ' + JSON.stringify(ctxPanel));
+    check('output ladders match across the two surfaces',
+      JSON.stringify(outHost) === JSON.stringify(outPanel),
+      JSON.stringify(outHost) + '  vs  ' + JSON.stringify(outPanel));
+
+    // The figures that prompted the list, from the providers' own docs.
+    check('output reaches DeepSeek’s 384K ceiling', outHost.includes(393_216), outHost.join(', '));
+    check('output covers the 128K of the current Claude and GPT lines', outHost.includes(128_000));
+    check('context reaches the 1M models', ctxHost.includes(1_000_000), ctxHost.join(', '));
+    check('context covers Claude Haiku’s 200K', ctxHost.includes(200_000));
+    check('both ladders ascend and never repeat a size',
+      outHost.every((v, i) => i === 0 || v > outHost[i - 1])
+      && ctxHost.every((v, i) => i === 0 || v > ctxHost[i - 1]));
+
+    // No ladder covers every model, so both surfaces take an exact figure too.
+    check('the palette offers a custom size', host.includes("label: 'Custom...'"));
+    check('the panel offers a custom size', panel.includes("value: 'custom', label: 'Custom'"));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });
