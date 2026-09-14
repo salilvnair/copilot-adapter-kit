@@ -1,11 +1,15 @@
 // ApplicationContext — IoC container. Every service resolves from here.
 import vscode from 'vscode';
 import { CopilotBridge } from '../conduit/copilot-bridge';
+import { AuditRecorder } from '../crosscut/audit-recorder';
+import { BudgetWarden } from '../crosscut/budget-warden';
 import { DiagTracer } from '../crosscut/diag-tracer';
 import { ErrorWarden } from '../crosscut/error-warden';
 import { RateLimitGuard } from '../crosscut/rate-limit-guard';
 import { ProviderDiscovery } from '../mesh/discovery';
 import { InterceptorPipeline } from '../mesh/pipeline';
+import { BudgetLedger } from './budget';
+import { ProviderHealth } from './health';
 import { Tuning } from './tuning';
 import { Vault } from './vault';
 
@@ -16,6 +20,10 @@ export class Context {
   readonly pipeline: InterceptorPipeline;
   readonly bridge: CopilotBridge;
   readonly rateLimitGuard: RateLimitGuard;
+  readonly budget: BudgetLedger;
+  readonly health: ProviderHealth;
+  readonly budgetWarden: BudgetWarden;
+  readonly auditRecorder: AuditRecorder;
   readonly errorWarden: ErrorWarden;
   readonly tracer: DiagTracer;
 
@@ -25,6 +33,10 @@ export class Context {
     this.discovery = new ProviderDiscovery();
     this.pipeline  = new InterceptorPipeline();
     this.rateLimitGuard = new RateLimitGuard();
+    this.budget         = new BudgetLedger(ext);
+    this.health         = new ProviderHealth(ext);
+    this.budgetWarden   = new BudgetWarden(this.budget);
+    this.auditRecorder  = new AuditRecorder();
     this.errorWarden   = new ErrorWarden();
     this.tracer    = new DiagTracer(ext);
     this.bridge    = new CopilotBridge(this);
@@ -32,6 +44,11 @@ export class Context {
 
   static async bootstrap(ext: vscode.ExtensionContext): Promise<Context> {
     const ctx = new Context(ext);
+    // Spend guard runs first: it must see every request before the network does,
+    // and its sink hooks must sit underneath RateLimitGuard's out-of-band retries.
+    ctx.pipeline.use(ctx.budgetWarden);
+    // After the guard, so a refused request is still recorded — with the reason.
+    ctx.pipeline.use(ctx.auditRecorder);
     ctx.pipeline.use(ctx.rateLimitGuard);
     ctx.pipeline.use(ctx.errorWarden);
     ctx.pipeline.use(ctx.tracer);

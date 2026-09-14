@@ -22,7 +22,11 @@ export class OpenAIEngine implements Engine {
 
   async stream(req: Payload, sink: StreamEvents, signal?: AbortSignal): Promise<void> {
     const apiPath = req.apiPath || '/chat/completions';
-    const { apiPath: _, ...bodyReq } = req;
+    // Strip transport-local fields (apiPath, _budget, _visionFallback) — they are
+    // internal routing/metadata and must never reach the provider.
+    const bodyReq = Object.fromEntries(
+      Object.entries(req).filter(([k]) => k !== 'apiPath' && !k.startsWith('_')),
+    );
     const res = await fetch(`${this.baseUrl}${apiPath}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },

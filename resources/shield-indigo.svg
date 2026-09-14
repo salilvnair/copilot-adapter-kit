@@ -1,0 +1,15 @@
+<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+  <!-- Tab icon for the Spend Guard panel. Fixed indigo rather than a ThemeIcon:
+       VS Code recolours codicons to the tab foreground, which is what made this
+       read as just another grey tab. #6366f1 is the panel's own primary. -->
+  <path
+    d="M8 1.4 13.6 3.5 V8.1 C13.6 11.3 11.4 13.6 8 14.7 4.6 13.6 2.4 11.3 2.4 8.1 V3.5 Z"
+    fill="#6366f1" fill-opacity=".16"
+    stroke="#6366f1" stroke-width="1.35" stroke-linejoin="round"
+  />
+  <path
+    d="M5.7 8.1 7.3 9.7 10.4 6.4"
+    fill="none" stroke="#6366f1" stroke-width="1.35"
+    stroke-linecap="round" stroke-linejoin="round"
+  />
+</svg>

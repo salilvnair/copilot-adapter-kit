@@ -83,6 +83,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .badge-info{background:rgba(59,130,246,.12);color:var(--color-info)}
 .badge-purple{background:rgba(167,139,250,.12);color:var(--color-accent-purple)}
 .badge-muted{background:rgba(255,255,255,.06);color:var(--color-text-muted)}
+.meter{height:8px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden;margin:6px 0}
+.meter-fill{height:100%;border-radius:4px;transition:width .3s}
+.meter-ok{background:var(--color-success)}.meter-warn{background:var(--color-warning)}.meter-over{background:var(--color-error)}
+.danger-banner{border:1px solid var(--color-error);background:rgba(239,68,68,.10);border-radius:8px;padding:12px;margin-bottom:14px}
+.budget-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:8px}
+.budget-stat{background:rgba(255,255,255,.03);border-radius:8px;padding:10px 12px}
+.budget-stat .k{font-size:11px;color:var(--color-text-muted)}
+.budget-stat .v{font-size:17px;font-weight:600;margin-top:2px}
 
 .btn{padding:8px 16px;font-size:12px;font-weight:600;border:none;border-radius:8px;cursor:pointer;transition:all 140ms;display:inline-flex;align-items:center;gap:6px}
 .btn-primary{background:var(--color-primary);color:#fff}
@@ -142,6 +150,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="sidebar-tab" data-tab="keys"><span class="tab-icon">🔑</span>API Keys</div>
 <div class="sidebar-section" style="margin-top:4px">Settings</div>
 <div class="sidebar-tab" data-tab="config"><span class="tab-icon">⚙️</span>Configuration</div>
+<div class="sidebar-tab" data-tab="budget"><span class="tab-icon">🛡️</span>Spend Guard<span class="tab-badge" id="budgetBadge">on</span></div>
 <div class="sidebar-section" style="margin-top:4px">Tools</div>
 <div class="sidebar-tab" data-tab="json"><span class="tab-icon">{ }</span>JSON Settings</div>
 <div class="sidebar-tab" data-tab="dumps"><span class="tab-icon">📂</span>Request Dumps</div>
@@ -159,7 +168,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 <script>
 const vsc=acquireVsCodeApi();
-let st={providers:{},models:[],builtinModels:[],copilotModels:[],maxTokens:0,logLevel:'quiet',stabilizeTools:false,hiddenBuiltins:[],hiddenCustomModels:[],keys:{},visionFallbackModel:'',visionFallbackAlways:false,systemPrompt:'',userPromptTemplate:'',gitPrompt:'',maxDiffFiles:500,gitStaged:'',gitUnstaged:'',gitStatusShort:'',gitBranch:'',gitRepo:'',gitFetched:false};
+let st={providers:{},models:[],builtinModels:[],copilotModels:[],maxTokens:0,logLevel:'quiet',stabilizeTools:false,hiddenBuiltins:[],hiddenCustomModels:[],keys:{},visionFallbackModel:'',visionFallbackAlways:false,systemPrompt:'',userPromptTemplate:'',gitPrompt:'',maxDiffFiles:500,gitStaged:'',gitUnstaged:'',gitStatusShort:'',gitBranch:'',gitRepo:'',gitFetched:false,budget:null};
 let active='providers';
 
 // SVG icons — exact Daakia paths (24x24 viewBox, rendered at 14px)
@@ -182,7 +191,7 @@ document.getElementById('sidebar').addEventListener('click',e=>{
 
 function render(){
   const c=document.getElementById('content');
-  switch(active){case'providers':c.innerHTML=rProv();break;case'models':c.innerHTML=rMod();break;case'keys':c.innerHTML=rKeys();break;case'config':c.innerHTML=rCfg();break;case'json':c.innerHTML=rJson();break;case'dumps':c.innerHTML=rDmp();break;case'danger':c.innerHTML=rDanger();break;case'bin':c.innerHTML=rBin();break;case'tools':c.innerHTML=rTools();break;case'devtools':c.innerHTML=rDev();}
+  switch(active){case'providers':c.innerHTML=rProv();break;case'models':c.innerHTML=rMod();break;case'keys':c.innerHTML=rKeys();break;case'config':c.innerHTML=rCfg();break;case'budget':c.innerHTML=rBudget();break;case'json':c.innerHTML=rJson();break;case'dumps':c.innerHTML=rDmp();break;case'danger':c.innerHTML=rDanger();break;case'bin':c.innerHTML=rBin();break;case'tools':c.innerHTML=rTools();break;case'devtools':c.innerHTML=rDev();}
   updBadges();rebindDD();
 }
 
@@ -453,12 +462,83 @@ function addKey(){
 }
 function clrKey(uuid){vsc.postMessage({type:'clearApiKey',payload:{uuid:uuid}})}
 
+// --- Spend Guard ---
+function fmtTok(n){n=n||0;if(n>=1e9)return (n/1e9).toFixed(2)+'B';if(n>=1e6)return (n/1e6).toFixed(2)+'M';if(n>=1e3)return (n/1e3).toFixed(1)+'K';return String(Math.round(n))}
+function meter(pct){const p=pct<0?0:Math.min(pct,100);const cls=pct>=100?'meter-over':pct>=80?'meter-warn':'meter-ok';return`<div class="meter"><div class="meter-fill ${cls}" style="width:${p}%"></div></div>`}
+
+function rBudget(){
+  const b=st.budget;
+  if(!b) return`<div class="content-title">🛡️ Spend Guard</div><div class="content-subtitle">Usage data is unavailable — reload the window.</div>`;
+  const caps=b.caps, d=b.day;
+  const used=(d.inputTokens||0)+(d.outputTokens||0);
+  const tokLine=caps.dailyTokenLimit>0?fmtTok(used)+' / '+fmtTok(caps.dailyTokenLimit):fmtTok(used)+' (no limit)';
+  const costLine=caps.dailyCostLimitUsd>0?'$'+(d.costUsd||0).toFixed(2)+' / $'+caps.dailyCostLimitUsd.toFixed(2):'$'+(d.costUsd||0).toFixed(2)+' (no limit)';
+
+  const banner = caps.enforce
+    ? (b.overLimit
+        ? `<div class="danger-banner"><b>🛑 Daily budget reached.</b> Further requests are blocked until tomorrow, or until you raise the limits below.</div>`
+        : '')
+    : `<div class="danger-banner"><b>🔴 DANGER — the spend guard is OFF.</b><div style="margin-top:6px;color:var(--color-text-muted);font-size:12px">Nothing is capped: no daily budget, no per-request ceiling, no agent-loop guard. A runaway agent can consume tens of millions of tokens unattended and your provider will bill you for all of it.</div><div style="margin-top:10px"><button class="btn btn-sm btn-primary" onclick="setGuard(true)">🛡️ Re-enable protection</button></div></div>`;
+
+  const byModel=Object.entries(d.byModel||{}).sort((a,c)=>((c[1].inputTokens+c[1].outputTokens)-(a[1].inputTokens+a[1].outputTokens))).slice(0,10);
+  const modelRows=byModel.length?byModel.map(([id,m])=>`<div class="model-row"><div class="model-info"><span class="model-name">${esc(id)}</span><span class="badge badge-muted">${m.requests} req</span></div><div class="model-badges"><span class="badge badge-primary">${fmtTok(m.inputTokens)} in</span><span class="badge badge-info">${fmtTok(m.outputTokens)} out</span>${m.costUsd>0?`<span class="badge badge-success">$${m.costUsd.toFixed(2)}</span>`:''}</div></div>`).join(''):'<div style="color:var(--color-text-muted);padding:8px 0">No requests recorded today.</div>';
+
+  return`<div class="content-title">🛡️ Spend Guard</div>
+  <div class="content-subtitle">Hard limits applied before any request leaves your machine. On by default.</div>
+  ${banner}
+
+  <div class="card">
+    <div class="card-header">📊 Today — ${esc(d.day||'')} ${caps.enforce?'<span class="badge badge-success">protected</span>':'<span class="badge badge-error">UNCAPPED</span>'}${d.estimated?'<span class="badge badge-warning" title="Some figures are estimates because the provider reported no usage">~estimated</span>':''}</div>
+    <div class="budget-stat"><div class="k">Tokens used</div><div class="v">${tokLine}</div>${caps.dailyTokenLimit>0?meter(b.tokenPct):''}</div>
+    <div class="budget-grid">
+      <div class="budget-stat"><div class="k">Input</div><div class="v">${fmtTok(d.inputTokens)}</div></div>
+      <div class="budget-stat"><div class="k">Output</div><div class="v">${fmtTok(d.outputTokens)}</div></div>
+      <div class="budget-stat"><div class="k">Estimated cost</div><div class="v">${costLine}</div></div>
+      <div class="budget-stat"><div class="k">Requests</div><div class="v">${d.requests||0}${d.blocked?' <span class="badge badge-error">'+d.blocked+' blocked</span>':''}</div></div>
+    </div>
+    <div style="margin-top:12px"><button class="btn btn-sm btn-ghost" onclick="vsc.postMessage({type:'resetBudget'})" title="Zero the local counters">↺ Reset today's counters</button></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">📈 By Model</div>
+    ${modelRows}
+  </div>
+
+  <div class="card">
+    <div class="card-header">⚙️ Limits</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Daily token limit <span class="badge badge-muted">0 = off</span></label>
+        <div class="inline-row"><input class="form-input sm" id="bgTok" value="${caps.dailyTokenLimit}" style="width:140px"><button class="btn btn-sm btn-primary" onclick="svCfg('budget.dailyTokenLimit',+gid('bgTok').value||0)">💾</button></div></div>
+      <div class="form-group"><label class="form-label">Daily cost limit (USD) <span class="badge badge-muted">0 = off</span></label>
+        <div class="inline-row"><input class="form-input sm" id="bgCost" value="${caps.dailyCostLimitUsd}" style="width:140px"><button class="btn btn-sm btn-primary" onclick="svCfg('budget.dailyCostLimitUsd',+gid('bgCost').value||0)">💾</button></div></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Max input tokens per request</label>
+        <div class="inline-row"><input class="form-input sm" id="bgIn" value="${caps.maxInputTokensPerRequest}" style="width:140px"><button class="btn btn-sm btn-primary" onclick="svCfg('budget.maxInputTokensPerRequest',+gid('bgIn').value||0)">💾</button></div></div>
+      <div class="form-group"><label class="form-label">Max output tokens <span class="badge badge-muted">0 = model max</span></label>
+        <div class="inline-row"><input class="form-input sm" id="bgOut" value="${caps.maxOutputTokens}" style="width:140px"><button class="btn btn-sm btn-primary" onclick="svCfg('budget.maxOutputTokens',+gid('bgOut').value||0)">💾</button></div></div>
+    </div>
+    <div class="form-group"><label class="form-label">Agent loop guard — max requests per conversation</label>
+      <div class="inline-row"><input class="form-input sm" id="bgTurns" value="${caps.maxTurnsPerConversation}" style="width:140px"><button class="btn btn-sm btn-primary" onclick="svCfg('budget.maxTurnsPerConversation',+gid('bgTurns').value||0)">💾</button></div>
+      <div style="font-size:11px;color:var(--color-text-muted);margin-top:4px">Each agent tool round-trip resends the whole conversation. This is the cap that stops an overnight runaway.</div></div>
+  </div>
+
+  <div class="card" style="${caps.enforce?'':'border-color:var(--color-error)'}">
+    <div class="card-header">${caps.enforce?'🔓 Remove protection':'🔴 Protection is off'}</div>
+    ${caps.enforce
+      ? `<div style="color:var(--color-text-muted);font-size:12px;margin-bottom:10px">Disabling the guard removes every limit above. Requests become unbounded and the status bar turns red until you switch it back on.</div><button class="btn btn-sm btn-danger" onclick="setGuard(false)">⚠️ Disable spend guard</button>`
+      : `<button class="btn btn-sm btn-primary" onclick="setGuard(true)">🛡️ Enable spend guard</button>`}
+  </div>`;
+}
+
+function setGuard(on){vsc.postMessage({type:'setBudgetGuard',payload:{on:on}})}
+
 // --- Config ---
 function rCfg(){
   const sp = st.systemPrompt || DEFAULT_SYSTEM_PROMPT;
   const up = st.userPromptTemplate || '';
   return`<div class="content-title">⚙️ Configuration</div><div class="content-subtitle">Global settings for all providers</div>
-  <div class="card"><div class="card-header">Max Output Tokens</div><div class="inline-row"><input class="form-input sm" id="cfgMaxT" value="${st.maxTokens||''}" placeholder="0 = unlimited" style="width:160px"><button class="btn btn-sm btn-primary" title="Save max tokens" onclick="svCfg('maxTokens',+gid('cfgMaxT').value||0)">💾 Save</button></div></div>
+  <div class="card"><div class="card-header">Max Output Tokens <span class="badge badge-muted">capped by Spend Guard</span></div><div class="inline-row"><input class="form-input sm" id="cfgMaxT" value="${st.maxTokens||''}" placeholder="0 = model max" style="width:160px"><button class="btn btn-sm btn-primary" title="Save max tokens" onclick="svCfg('maxTokens',+gid('cfgMaxT').value||0)">💾 Save</button></div></div>
   <div class="card"><div class="card-header">Log Level</div><div class="dropdown-wrap" id="ddLog"></div></div>
   <div class="card"><div class="card-header">Tool Stabilization <span class="badge badge-warning">experimental</span></div><div class="checkbox-wrap" id="cbStab"><div class="checkbox-box"><svg class="checkbox-icon" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3"/></svg></div><span class="checkbox-label">Pre‑activate tools for cache stability</span></div></div>
   <div class="card">
@@ -859,7 +939,7 @@ function confirmModal(title,body,onOk){
   document.getElementById('modalOk').onclick=()=>{ov.remove();onOk();};
   ov.addEventListener('click',e=>{if(e.target===ov)ov.remove()});
 }
-function updBadges(){const provs=Object.values(st.providers).filter(p=>p&&!p._deleted).length;let mods=0,delMods=0;for(const arr of Object.values(st.models||{})){if(Array.isArray(arr)){mods+=arr.filter(m=>!m._deleted).length;delMods+=arr.filter(m=>m._deleted).length;}}const delProvs=Object.values(st.providers).filter(p=>p&&p._deleted).length;document.getElementById('provCount').textContent=provs;document.getElementById('modelCount').textContent=mods;const bc=document.getElementById('binCount');if(bc)bc.textContent=delProvs+delMods}
+function updBadges(){const provs=Object.values(st.providers).filter(p=>p&&!p._deleted).length;let mods=0,delMods=0;for(const arr of Object.values(st.models||{})){if(Array.isArray(arr)){mods+=arr.filter(m=>!m._deleted).length;delMods+=arr.filter(m=>m._deleted).length;}}const delProvs=Object.values(st.providers).filter(p=>p&&p._deleted).length;document.getElementById('provCount').textContent=provs;document.getElementById('modelCount').textContent=mods;const bc=document.getElementById('binCount');if(bc)bc.textContent=delProvs+delMods;const bb=document.getElementById('budgetBadge');if(bb){const on=st.budget?st.budget.caps.enforce:true;bb.textContent=on?'on':'OFF';bb.style.color=on?'':'var(--color-error)';bb.style.fontWeight=on?'':'700'}}
 function gid(id){return document.getElementById(id)}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')}
 

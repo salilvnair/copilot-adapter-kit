@@ -1,0 +1,55 @@
+{
+  // Press F5 to launch a second VS Code window ("Extension Development Host")
+  // with this extension loaded from source.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js"
+      ],
+      "preLaunchTask": "npm: watch"
+    },
+    {
+      // Same, but skips the build — use when the watch task is already running
+      // or you only changed media/*.html (webview assets are not compiled).
+      "name": "Run Extension (no rebuild)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js"
+      ]
+    },
+    {
+      // Opens the dev host on a folder of your choice, so the Git AI panel and
+      // the commit-message tools have a real repository to work against.
+      "name": "Run Extension (pick a workspace)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${input:testWorkspace}"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js"
+      ],
+      "preLaunchTask": "npm: watch"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "testWorkspace",
+      "type": "promptString",
+      "description": "Folder to open in the Extension Development Host",
+      "default": "${workspaceFolder}"
+    }
+  ]
+}

@@ -17,6 +17,8 @@ jobs:
           node-version: 24
 
       - run: npm ci
+      # compile also builds the webview bundle, which has its own dependencies.
+      - run: npm ci --prefix webview-ui
       - run: npm run compile
 
       - name: Publish to VS Code Marketplace

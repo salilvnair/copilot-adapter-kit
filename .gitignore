@@ -4,6 +4,8 @@ node_modules/
 # ── Build output ──
 out/
 dist/
+media/dist/
+webview-ui/node_modules/
 *.vsix
 
 # ── Secrets & credentials ──
@@ -33,9 +35,9 @@ Desktop.ini
 *.swp
 *.swo
 *~
-.vscode/launch.json
 .vscode/settings.json
 !.vscode/tasks.json
+!.vscode/launch.json
 !.vscode/extensions.json
 .idea/
 *.iml
@@ -58,3 +60,10 @@ coverage/
 *.tar.gz
 .eslintcache
 .cache/
+*.tsbuildinfo
+
+# ── Playwright ──
+webview-ui/test-results/
+webview-ui/playwright-report/
+webview-ui/blob-report/
+webview-ui/.playwright/

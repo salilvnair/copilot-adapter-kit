@@ -1,0 +1,7 @@
+{
+  // The adapter registers a language model provider that Copilot Chat consumes,
+  // so the dev host needs Copilot Chat installed to exercise it end to end.
+  "recommendations": [
+    "github.copilot-chat"
+  ]
+}

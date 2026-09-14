@@ -1,201 +1,394 @@
-// MiniGitPanel — reads HTML from media/mini-git-panel.html (same pattern as SettingsPanel)
+// MiniGitPanel — the Git AI sidebar.
+//
+// Phase 4: the document is the React bundle built from webview-ui/. The git
+// plumbing is unchanged; what changed is that it now sends structured data.
+// The old panel computed the branch, the staged counts and the per-file diff
+// stats and then formatted them into a string — the counts never reached the
+// screen at all. They do now.
+
 import { exec } from 'child_process';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import vscode from 'vscode';
 import { resolveCatalog } from '../conduit/model-catalog';
+import { fmtTokens, parsePricingUsd } from '../kernel/budget';
 import { Context } from '../kernel/context';
 import type { Payload, StreamEvents } from '../mesh/contract';
+import { estimateTokens } from '../tooling/token-math';
+import { WebviewHost } from './webview-host';
+
+interface GitFile {
+  path: string;
+  dir: string;
+  added: number;
+  removed: number;
+  staged: boolean;
+  state: 'new' | 'modified' | 'deleted';
+}
 
 export class MiniGitPanel implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
+  private host: WebviewHost;
+  /** Model the user picked in the sidebar, remembered for the session. */
+  private chosenModel: string | undefined;
 
-  constructor(private ext: vscode.ExtensionContext, private ctx: Context) {}
+  constructor(private ext: vscode.ExtensionContext, private ctx: Context) {
+    this.host = new WebviewHost(ext);
+  }
 
   resolveWebviewView(wv: vscode.WebviewView): void {
     this.view = wv;
-    wv.webview.options = { enableScripts: true };
-    wv.webview.html = this._html();
+    wv.webview.options = {
+      enableScripts: true,
+      localResourceRoots: this.host.localRoots,
+    };
+    try {
+      wv.webview.html = this.host.html(wv.webview, 'sidebar');
+    } catch (e) {
+      wv.webview.html = `<html><body style="font-family:system-ui;background:#1e1e1e;color:#d4d4d4;padding:20px">
+        <p>${(e as Error).message}</p></body></html>`;
+      return;
+    }
+
     wv.webview.onDidReceiveMessage(async (m: { type: string; payload?: any }) => {
-      if (m.type === 'getData') { this._sendProvidersAndModels(); await this._refreshGit(); }
-      else if (m.type === 'generate') await this._generate(m.payload?.uuid, m.payload?.modelId, m.payload?.userMsg);
-      else if (m.type === 'openSettings') vscode.commands.executeCommand('copilot-adapter-kit.openPanel');
+      try {
+        await this._handle(m);
+      } catch (e) {
+        this._post('genError', { message: (e as Error).message });
+      }
     });
-    setTimeout(() => { this._refreshGit(); this._sendProvidersAndModels(); }, 300);
+
+    // The working tree changes outside this panel; follow it.
+    const watcher = vscode.workspace.createFileSystemWatcher('**/*');
+    const refresh = _debounce(() => void this._send(), 600);
+    watcher.onDidChange(refresh);
+    watcher.onDidCreate(refresh);
+    watcher.onDidDelete(refresh);
+    wv.onDidDispose(() => watcher.dispose());
+
+    void this._send();
   }
 
-  private _html(): string {
-    try {
-      let html = readFileSync(join(this.ext.extensionPath, 'media', 'mini-git-panel.html'), 'utf-8');
-      // Inject MdViewer bundle as inline script (satisfies CSP)
-      try {
-        const bundle = readFileSync(join(this.ext.extensionPath, 'media', 'md-viewer-bundle.js'), 'utf-8');
-        html = html.replace('</body>', '<script>' + bundle + '</script></body>');
-      } catch { /* bundle not built yet — MdViewer unavailable */ }
-      return html;
+  private async _handle(m: { type: string; payload?: any }): Promise<void> {
+    switch (m.type) {
+      case 'getState':
+      case 'refreshGit':
+        await this._send();
+        break;
+      case 'generate':
+        await this._generate(m.payload?.message, m.payload?.scope);
+        break;
+      case 'pickModel':
+        await this._pickModel();
+        break;
+      case 'commit':
+        await this._commit(m.payload?.message, Boolean(m.payload?.push));
+        break;
+      case 'copy':
+        await vscode.env.clipboard.writeText(String(m.payload?.text ?? ''));
+        void vscode.window.showInformationMessage('Commit message copied.');
+        break;
+      case 'openFile': {
+        const root = _root();
+        if (root && m.payload?.path) {
+          const uri = vscode.Uri.joinPath(vscode.Uri.file(root), m.payload.path);
+          await vscode.commands.executeCommand('vscode.open', uri);
+        }
+        break;
+      }
+      case 'openFolder':
+        await vscode.commands.executeCommand('vscode.openFolder');
+        break;
+      case 'initRepo':
+        await this._runGit('init');
+        await this._send();
+        break;
+      case 'openGitSettings':
+        await vscode.commands.executeCommand('workbench.action.openSettings', 'copilot-adapter-kit.gitPrompt');
+        break;
+      case 'openPanel':
+        await vscode.commands.executeCommand('copilot-adapter-kit.openPanel');
+        break;
     }
-    catch { return '<html><body style="color:#d4d4d4;background:#1e1e1e;padding:24px"><h2>Panel not found</h2></body></html>'; }
+  }
+
+  // ---- State ----
+
+  private async _send(): Promise<void> {
+    if (!this.view) return;
+    const root = _root();
+    const hasRepo = Boolean(root) && (await this._runGit('rev-parse --is-inside-work-tree')).trim() === 'true';
+
+    if (!hasRepo) {
+      this._post('gitState', {
+        hasRepo: false, ahead: 0, behind: 0, files: [], staged: 0, changed: 0,
+        providers: [], models: [], guard: this._guard(),
+      });
+      return;
+    }
+
+    const branch = (await this._runGit('rev-parse --abbrev-ref HEAD')).trim();
+    const repo = (await this._runGit('rev-parse --show-toplevel')).trim().split(/[/\\]/).pop() ?? '';
+    const files = await this._files();
+    const { ahead, behind } = await this._tracking();
+    const models = resolveCatalog().map(m => ({ id: m.id, name: m.name, family: m.family }));
+
+    const providers = Object.entries(
+      vscode.workspace.getConfiguration('copilot-adapter-kit').get<Record<string, any>>('providers') || {},
+    )
+      .filter(([, p]) => p && !p._deleted)
+      .map(([uuid, p]) => ({ uuid, name: p.name || p.family || uuid, family: p.family || '', hasKey: false }));
+
+    this._post('gitState', {
+      hasRepo: true,
+      repo, branch, ahead, behind, files,
+      staged: files.filter(f => f.staged).length,
+      changed: files.length,
+      providers, models,
+      chosenModel: this.chosenModel ?? models[0]?.id,
+      estimate: await this._estimate(files),
+      guard: this._guard(),
+    });
+  }
+
+  private _guard() {
+    const s = this.ctx.budget.status();
+    const used = s.day.inputTokens + s.day.outputTokens;
+    return {
+      pct: s.tokenPct >= 0 ? Math.max(s.tokenPct, s.costPct) : 0,
+      used,
+      limit: s.caps.dailyTokenLimit,
+      costUsd: s.day.costUsd,
+      enforce: s.caps.enforce,
+    };
+  }
+
+  /** What the prompt would cost as things stand, so it is known before sending. */
+  private async _estimate(files: GitFile[]): Promise<{ tokens: number; costUsd: number }> {
+    const diff = await this._diff(files.some(f => f.staged) ? 'staged' : 'all');
+    const tokens = estimateTokens(diff) + 400; // the instructions around it
+    const meta = resolveCatalog().find(m => m.id === (this.chosenModel ?? ''));
+    const price = parsePricingUsd(meta?.pricing);
+    return { tokens, costUsd: price ? (tokens / 1e6) * price.input : 0 };
+  }
+
+  /** Per-file adds and removes — computed before and thrown away before. */
+  private async _files(): Promise<GitFile[]> {
+    const status = (await this._runGit('status --porcelain')).trim();
+    if (!status) return [];
+
+    const numstat = async (args: string) => {
+      const out = await this._runGit(`diff ${args} --numstat`);
+      const map = new Map<string, { added: number; removed: number }>();
+      for (const line of out.split('\n')) {
+        const [a, r, ...rest] = line.trim().split(/\t/);
+        if (!rest.length) continue;
+        map.set(rest.join('\t'), { added: Number(a) || 0, removed: Number(r) || 0 });
+      }
+      return map;
+    };
+    const stagedStats = await numstat('--cached');
+    const unstagedStats = await numstat('');
+
+    const out: GitFile[] = [];
+    for (const line of status.split('\n')) {
+      if (!line.trim()) continue;
+      const x = line[0], y = line[1];
+      const full = line.slice(3).trim().replace(/^"|"$/g, '');
+      const parts = full.split('/');
+      const path = parts.pop() ?? full;
+      const dir = parts.join('/');
+      const staged = x !== ' ' && x !== '?';
+      const stats = (staged ? stagedStats.get(full) : unstagedStats.get(full))
+        ?? unstagedStats.get(full) ?? stagedStats.get(full) ?? { added: 0, removed: 0 };
+      const state: GitFile['state'] =
+        x === 'D' || y === 'D' ? 'deleted' : x === '?' || x === 'A' ? 'new' : 'modified';
+      out.push({ path, dir, staged, added: stats.added, removed: stats.removed, state });
+    }
+    return out;
+  }
+
+  private async _tracking(): Promise<{ ahead: number; behind: number }> {
+    const out = (await this._runGit('rev-list --left-right --count HEAD...@{upstream}')).trim();
+    const [a, b] = out.split(/\s+/).map(Number);
+    return { ahead: Number.isFinite(a) ? a : 0, behind: Number.isFinite(b) ? b : 0 };
+  }
+
+  // ---- Actions ----
+
+  private async _pickModel(): Promise<void> {
+    const models = resolveCatalog();
+    if (!models.length) {
+      void vscode.window.showWarningMessage('No models configured. Add one in Copilot Adapter Kit.');
+      return;
+    }
+    const pick = await vscode.window.showQuickPick(
+      models.map(m => ({ label: m.name, description: m.id, detail: m.detail, id: m.id })),
+      { placeHolder: 'Model for commit messages', ignoreFocusOut: true },
+    );
+    if (!pick) return;
+    this.chosenModel = pick.id;
+    await this._send();
+  }
+
+  private async _commit(message: string, push: boolean): Promise<void> {
+    if (!message?.trim()) return;
+    const staged = (await this._runGit('diff --cached --name-only')).trim();
+    if (!staged) {
+      const go = await vscode.window.showWarningMessage(
+        'Nothing is staged. Stage every change and commit?', 'Stage all and commit', 'Cancel');
+      if (go !== 'Stage all and commit') return;
+      await this._runGit('add -A');
+    }
+    const file = vscode.Uri.joinPath(this.ext.globalStorageUri, 'commit-msg.txt');
+    await vscode.workspace.fs.createDirectory(this.ext.globalStorageUri);
+    await vscode.workspace.fs.writeFile(file, Buffer.from(message, 'utf-8'));
+    const res = await this._runGit(`commit -F "${file.fsPath}"`);
+    if (push) await this._runGit('push');
+    void vscode.window.showInformationMessage(
+      push ? 'Committed and pushed.' : `Committed. ${res.split('\n')[0] ?? ''}`.trim());
+    await this._send();
+  }
+
+  private async _generate(userMessage: string | undefined, scope: 'staged' | 'all'): Promise<void> {
+    const files = await this._files();
+    const diff = await this._diff(scope === 'staged' && files.some(f => f.staged) ? 'staged' : 'all');
+    if (!diff.trim()) {
+      this._post('genError', { message: 'Nothing to describe — no changes in scope.' });
+      return;
+    }
+
+    const cfg = vscode.workspace.getConfiguration('copilot-adapter-kit');
+    const providers = cfg.get<Record<string, any>>('providers') || {};
+    const modelId = this.chosenModel ?? resolveCatalog()[0]?.id;
+    const meta = resolveCatalog().find(m => m.id === modelId);
+    const family = meta?.family ?? '';
+    const entry = Object.entries(providers).find(([, p]) => p && !p._deleted && p.family === family);
+    if (!entry || !meta) {
+      this._post('genError', { message: 'No provider configured for this model.' });
+      return;
+    }
+    const [uuid, prov] = entry;
+    const key = await this.ctx.vault.fetch(uuid);
+    if (!key) {
+      this._post('genError', { message: `No API key for ${prov.name || family}.` });
+      return;
+    }
+
+    const branch = (await this._runGit('rev-parse --abbrev-ref HEAD')).trim();
+    const repo = (await this._runGit('rev-parse --show-toplevel')).trim().split(/[/\\]/).pop() ?? '';
+    const template = cfg.get<string>('gitPrompt', '') || DEFAULT_GIT_PROMPT;
+    const prompt = template
+      .replace(/\{branch\}/g, branch)
+      .replace(/\{repo\}/g, repo)
+      .replace(/\{diff\}/g, diff)
+      .replace(/\{guidance\}/g, userMessage?.trim() ? `User guidance: ${userMessage}\n\n` : '');
+
+    const engine = this.ctx.discovery.lookup(prov.family || family);
+    engine.configure?.(prov.baseUrl, key);
+
+    const payload: Payload = {
+      model: this.ctx.tuning.resolveModelId(meta.id, family),
+      messages: [{ role: 'user', content: prompt }],
+      stream: true,
+      max_tokens: 2048,
+      apiPath: meta.apiPath || this.ctx.tuning.resolveApiPath(meta.id, family),
+      _budget: { pickerId: meta.id, maxIn: meta.maxIn, maxOut: meta.maxOut, pricing: meta.pricing },
+    };
+
+    this._post('genStart');
+    const started = Date.now();
+    let text = '';
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      const ms = Date.now() - started;
+      this._post('genDone', {
+        text: text.trim(),
+        ms,
+        tokPerSec: ms > 0 ? Math.round(estimateTokens(text) / (ms / 1000)) : 0,
+      });
+    };
+
+    const sink: StreamEvents = {
+      onToken: t => { text += t; this._post('genToken', t); },
+      onThinking: () => {},
+      onToolSignal: () => {},
+      onFault: e => {
+        if (text.trim()) { finish(); return; }
+        settled = true;
+        this._post('genError', { message: e.message || String(e) });
+      },
+      onComplete: finish,
+    };
+
+    // Through the pipeline, so the spend guard sees it like any other request.
+    await this.ctx.pipeline.wrap(engine).stream(payload, sink);
+    finish();
+    await this._send();
+  }
+
+  /** Full diff, or a --stat summary once it is too large for a context window. */
+  private async _diff(scope: 'staged' | 'all'): Promise<string> {
+    const threshold = vscode.workspace.getConfiguration('copilot-adapter-kit')
+      .get<number>('maxDiffFiles', 500);
+    const count = (await this._runGit('status --porcelain')).trim().split('\n').filter(Boolean).length;
+    const args = scope === 'staged' ? '--cached' : '';
+
+    if (count > threshold) {
+      const stat = (await this._runGit(`diff ${args} --stat`)).trim();
+      const numstat = (await this._runGit(`diff ${args} --numstat`)).trim();
+      return `## Compressed diff (${count} files, threshold ${threshold})\n\n`
+        + '```\n' + stat + '\n```\n\n### Numstat\n```\n' + numstat + '\n```';
+    }
+    if (scope === 'staged') return (await this._runGit('diff --cached')).trim();
+    return [
+      (await this._runGit('diff --cached')).trim(),
+      (await this._runGit('diff')).trim(),
+    ].filter(Boolean).join('\n\n');
+  }
+
+  // ---- Plumbing ----
+
+  private _post(type: string, payload?: unknown): void {
+    void this.view?.webview.postMessage({ type, payload });
   }
 
   private _runGit(args: string): Promise<string> {
-    return new Promise(r => exec(`git ${args}`, { cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, maxBuffer: 10*1024*1024 }, (e, o) => r(e ? '' : o)));
-  }
-
-  private _sendProvidersAndModels(): void {
-    const cfg = vscode.workspace.getConfiguration('copilot-adapter-kit');
-    const pv = cfg.get<Record<string, any>>('providers') || {};
-    // UUID-keyed providers matching settings-panel data model
-    const fams = Object.entries(pv)
-      .filter(([,p]) => p && !p._deleted)
-      .map(([uuid, p]) => ({ uuid, family: p.family || '', name: p.name || p.family || uuid }));
-    this.view?.webview.postMessage({ type: 'providers', payload: { families: fams } });
-    const cat = resolveCatalog();
-    const mb: Record<string, { id: string; name: string }[]> = {};
-    for (const fam of fams) {
-      mb[fam.uuid] = cat.filter(m => m.family === fam.family).map(m => ({ id: m.id, name: m.name }));
-    }
-    this.view?.webview.postMessage({ type: 'models', payload: { modelsByFamily: mb } });
-  }
-
-  private async _refreshGit(): Promise<void> {
-    if (!this.view) return;
-    try {
-      const br = (await this._runGit('rev-parse --abbrev-ref HEAD')).trim();
-      const rp = (await this._runGit('rev-parse --show-toplevel')).trim().split('/').pop() || '';
-      const st = (await this._runGit('status --short')).trim();
-      // Use git status --porcelain for accurate per-file counting (deduped, matches VS Code)
-      const statusLines = (await this._runGit('status --porcelain')).trim().split('\n').filter(Boolean);
-      const totalChanged = statusLines.length;
-      const stagedCount = statusLines.filter(l => l[0] !== ' ' && l[0] !== '?').length;
-      const unstagedCount = statusLines.filter(l => l[1] !== ' ').length;
-      this.view.webview.postMessage({ type: 'gitData', payload: { branch: br, repo: rp, statusShort: st, stagedCount, unstagedCount, totalChanged } });
-    } catch { this.view.webview.postMessage({ type: 'gitData', payload: {} }); }
-  }
-
-  /**
-   * Build a diff payload — full diff for small changes, --stat/--numstat summary
-   * for large changes to avoid hitting LLM context window limits.
-   */
-  private async _buildDiff(): Promise<{ diff: string; fileCount: number; compressed: boolean }> {
-    const threshold = vscode.workspace.getConfiguration('copilot-adapter-kit').get<number>('maxDiffFiles', 500);
-    const stagedFiles = (await this._runGit('diff --cached --name-only')).trim().split('\n').filter(Boolean);
-    const unstagedFiles = (await this._runGit('diff --name-only')).trim().split('\n').filter(Boolean);
-    // Use git status for accurate file count (dedupes staged+unstaged same files, matches VS Code git tab)
-    const statusLines = (await this._runGit('status --porcelain')).trim().split('\n').filter(Boolean);
-    const totalFiles = statusLines.length;
-
-    if (totalFiles > threshold) {
-      const parts: string[] = [];
-      parts.push('## Compressed Diff (' + totalFiles + ' files changed, threshold: ' + threshold + ')');
-      if (stagedFiles.length) {
-        const stat = (await this._runGit('diff --cached --stat')).trim();
-        const numstat = (await this._runGit('diff --cached --numstat')).trim();
-        parts.push('### Staged (' + stagedFiles.length + ' files)\n```\n' + stat + '\n```\n\n### Numstat\n```\n' + numstat + '\n```');
-      }
-      if (unstagedFiles.length) {
-        const stat = (await this._runGit('diff --stat')).trim();
-        const numstat = (await this._runGit('diff --numstat')).trim();
-        parts.push('### Unstaged (' + unstagedFiles.length + ' files)\n```\n' + stat + '\n```\n\n### Numstat\n```\n' + numstat + '\n```');
-      }
-      return { diff: parts.join('\n\n'), fileCount: totalFiles, compressed: true };
-    }
-
-    const staged = (await this._runGit('diff --cached')).trim();
-    const unstaged = (await this._runGit('diff')).trim();
-    const diff = [staged, unstaged].filter(Boolean).join('\n\n');
-    return { diff, fileCount: totalFiles, compressed: false };
-  }
-
-  private async _generate(chosenUuid?: string, chosenModel?: string, userMsg?: string): Promise<void> {
-    if (!this.view || !this.ctx) return;
-    const cfg = vscode.workspace.getConfiguration('copilot-adapter-kit');
-    const pv = cfg.get<Record<string, any>>('providers') || {};
-    if (!Object.keys(pv).length) { this.view.webview.postMessage({ type: 'genResult', payload: { error: 'No providers configured.' } }); return; }
-    const uuid = (chosenUuid && pv[chosenUuid]) ? chosenUuid : Object.keys(pv).find(k => pv[k] && !pv[k]._deleted) || Object.keys(pv)[0];
-    const prov = pv[uuid];
-    const family = prov.family || uuid;
-    const key = await this.ext.secrets.get(`copilot-adapter-kit.apiKey.${uuid}`);
-    if (!key) { this.view.webview.postMessage({ type: 'genResult', payload: { error: `No API key for "${prov.name || family}".` } }); return; }
-    try {
-      const { diff, fileCount, compressed } = await this._buildDiff();
-      if (!diff) { this.view.webview.postMessage({ type: 'genResult', payload: { error: 'No changes found.' } }); return; }
-      const engine = this.ctx.discovery.lookup(family);
-      engine.configure?.(prov.baseUrl, key);
-      const branch = (await this._runGit('rev-parse --abbrev-ref HEAD')).trim();
-      const repo = (await this._runGit('rev-parse --show-toplevel')).trim().split('/').pop() || '';
-      const gpc = cfg.get<string>('gitPrompt', '');
-      const dp = `You are an expert Git commit message writer. Generate a **comprehensive conventional commit message** using Markdown.\n\n**Requirements:**\n1. First line: type(scope): short summary (max 72 chars)\n2. Blank line\n3. **## Summary** section\n4. **## Changes** bullet points\n5. **## Impact** section\n6. Use **bold** for file names and inline code for symbols\n\nBranch: {branch}\nRepo: {repo}\n{guidance}\n--- DIFF ---\n{diff}\n\nGenerate only the commit message.`;
-      const guidance = userMsg?.trim() ? `User guidance: ${userMsg}\n\n` : '';
-      const prompt = (gpc || dp).replace(/\{branch\}/g, branch).replace(/\{repo\}/g, repo).replace(/\{diff\}/g, diff).replace(/\{guidance\}/g, guidance);
-      const cat = resolveCatalog();
-      const fms = cat.filter(m => m.family === family);
-      const model = (chosenModel && chosenModel !== 'auto' && chosenModel !== '') ? chosenModel : (fms.length > 0 ? fms[0].id : 'gpt-4o');
-      const ap = prov.defaultApiPath || '/chat/completions';
-      const baseUrl = prov.baseUrl || '';
-      const apiPath = ap;
-      const payload: Payload = { model, messages: [{ role: 'user', content: prompt }], stream: true, max_tokens: 2048, apiPath: ap };
-      const wrapped = this.ctx.pipeline.wrap(engine);
-      let text = '', settled = false;
-      const sysP = cfg.get<string>('systemPrompt', '');
-      const usrT = cfg.get<string>('userPromptTemplate', '');
-      const spDisp = sysP ? '\n\n```\n' + sysP.slice(0,800) + (sysP.length>800?'\n... (truncated)':'') + '\n```' : '\n\n*(none configured)*';
-      const utDisp = usrT ? '\n\n```\n' + usrT.slice(0,600) + (usrT.length>600?'\n... (truncated)':'') + '\n```' : '\n\n*(none configured)*';
-      const gpDisp = gpc ? '\n\n```\n' + gpc.slice(0,600) + (gpc.length>600?'\n... (truncated)':'') + '\n```' : '\n\n*(built-in default)*';
-      const promptPreview = prompt.length>1200 ? prompt.slice(0,1200)+'\n\n... *(truncated, '+prompt.length+' chars total)*' : prompt;
-      const tracePrefix = [
-        '# 🔬 Request Inspector',
-        '',
-        '| Property | Value |',
-        '|----------|-------|',
-        '| **Provider** | `' + (prov.name || family) + '` |',
-        '| **Model** | `' + model + '` |',
-        '| **Base URL** | `' + baseUrl + apiPath + '` |',
-        '| **API Key** | `' + key.slice(0,8) + '...' + key.slice(-4) + '` |',
-        '| **Branch** | `' + branch + '` |',
-        '| **Repo** | `' + repo + '` |',
-        '| **User Guidance** | ' + (userMsg?.trim() || '*(none)*') + ' |',
-        '| **Files Changed** | ' + fileCount + ' |',
-        '| **Diff Mode** | ' + (compressed ? 'compressed (threshold: ' + vscode.workspace.getConfiguration('copilot-adapter-kit').get<number>('maxDiffFiles', 500) + ')' : 'full') + ' |',
-        '',
-        '---',
-        '## 🧠 System Prompt' + spDisp,
-        '',
-        '---',
-        '## 📝 User Prompt Template' + utDisp,
-        '',
-        '---',
-        '## 💬 Git Commit Prompt' + gpDisp,
-        '',
-        '---',
-        '## 📤 Full Prompt Sent to LLM',
-        '',
-        '```',
-        promptPreview,
-        '```',
-      ].join('\n');
-      const t0 = Date.now();
-      const estTokens = (s: string) => Math.round(s.length / 3.5);
-      const done = (r: { text?: string; error?: string }) => {
-        if (settled) return; settled = true;
-        const elapsedMs = Date.now() - t0;
-        const promptTokens = estTokens(prompt);
-        const completionTokens = estTokens(r.text || '');
-        const totalTokens = promptTokens + completionTokens;
-        const tokPerSec = elapsedMs > 0 ? Math.round(completionTokens / (elapsedMs / 1000)) : 0;
-        const secs = (elapsedMs / 1000).toFixed(1);
-        // Append response + timing + token info to trace
-        const respPreview = r.text ? (r.text.length > 2000 ? r.text.slice(0,2000) + '\n\n... *(truncated, ' + r.text.length + ' chars)*' : r.text) : '*(empty)*';
-        const trace = tracePrefix + '\n\n---\n## 📥 LLM Response\n\n```\n' + respPreview + '\n```\n\n---\n## 📊 Performance\n\n| Metric | Value |\n|--------|-------|\n| **Prompt tokens** | ~' + promptTokens + ' |\n| **Completion tokens** | ~' + completionTokens + ' |\n| **Total tokens** | ~' + totalTokens + ' |\n| **Elapsed** | ' + secs + 's |\n| **Speed** | ' + tokPerSec + ' tok/s |';
-        this.view?.webview.postMessage({ type: 'genResult', payload: { ...r, provider: prov.name || family, model, trace, tokens: totalTokens, elapsedMs, completionTokens, tokPerSec } });
-      };
-      const sink: StreamEvents = {
-        onToken: t => { text += t; this.view?.webview.postMessage({ type: 'genToken', payload: t }); },
-        onThinking: () => {}, onToolSignal: () => {},
-        onFault: async e => done(text.trim() ? { text: text.trim() } : { error: e.message || String(e) }),
-        onComplete: () => done(text.trim() ? { text: text.trim() } : { error: 'LLM returned empty response.' }),
-      };
-      await wrapped.stream(payload, sink);
-      if (!settled) done({ error: 'No response from LLM.' });
-    } catch (e: any) { this.view.webview.postMessage({ type: 'genResult', payload: { error: e.message || String(e) } }); }
+    return new Promise(resolve =>
+      exec(`git ${args}`, { cwd: _root(), maxBuffer: 10 * 1024 * 1024 }, (err, out) =>
+        resolve(err ? '' : out)));
   }
 }
+
+const DEFAULT_GIT_PROMPT = `You are an expert Git commit message writer. Generate a **comprehensive conventional commit message** using Markdown.
+
+**Requirements:**
+1. First line: type(scope): short summary (max 72 chars)
+2. Blank line
+3. **## Summary** section
+4. **## Changes** bullet points
+5. **## Impact** section
+6. Use **bold** for file names and inline code for symbols
+
+Branch: {branch}
+Repo: {repo}
+{guidance}
+--- DIFF ---
+{diff}
+
+Generate only the commit message.`;
+
+function _root(): string | undefined {
+  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+}
+
+function _debounce(fn: () => void, ms: number): () => void {
+  let t: NodeJS.Timeout | undefined;
+  return () => {
+    if (t) clearTimeout(t);
+    t = setTimeout(fn, ms);
+    t.unref?.();
+  };
+}
+
+export { fmtTokens };

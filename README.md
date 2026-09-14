@@ -197,6 +197,123 @@ When you see "tool list is unstable" warnings, enable `stabilizeTools` in the Co
 
 ---
 
+## Audit log
+
+Every model call is recorded to a local SQLite database — sql.js compiled to WASM, so there
+is no native build step and it runs the same everywhere. One row per call: which model
+answered, how many tokens each way, what it cost, how long it took, and the reason if the
+Spend Guard refused it. Panel actions are recorded alongside them.
+
+| Setting | Default | |
+|---|---|---|
+| `audit.enabled` | `true` | Record calls at all |
+| `audit.recordBodies` | **`false`** | Also record prompts and responses |
+| `audit.retentionDays` | `30` | Prune older rows at startup; `0` keeps everything |
+| `audit.dbPath` | `~/.salilvnair/copilot-adapter-kit/db/cak.db` | Where it lives |
+
+**Bodies are off by default and that is deliberate.** For this extension the payload is your
+source code and your prompts, so an audit file holding it is a different proposition to one
+holding timings and token counts. Keys are never recorded either way, and neither are
+request headers — only the API path. If SQLite fails to start, the extension carries on and
+the screen says so.
+
+## Screens
+
+Every screen, tab and overlay is captured in [`docs/screenshots/`](docs/screenshots) —
+regenerate the set with `node scripts/screenshots.mjs`.
+
+## Webview UI
+
+The panels are built from `webview-ui/` — React 19 + Vite 6 + Tailwind 4, with
+[`@salilvnair/dui`](https://www.npmjs.com/package/@salilvnair/dui) 1.0.8 available for
+behaviour-heavy widgets. Three entries build into `media/dist/`, one per surface:
+`settings`, `spend-guard` and `sidebar`.
+
+| Command | What it does |
+|---|---|
+| `npm run install:webview` | Install the webview dependencies (once, after cloning) |
+| `npm run build:webview` | Build the bundles into `media/dist/` |
+| `npm run watch:webview` | Vite dev server with hot reload, for working on a screen |
+| `npm run compile` | Webview build + `tsc` — what F5 and packaging use |
+| `npm run typecheck` | Type-checks the extension and the webview |
+| `npm test` | Compiles, then runs the spend-guard, webview-host, message-contract and audit-database suites |
+| `npm run test:e2e` | Playwright drives every screen in a real browser |
+| `npm run test:all` | Both of the above |
+
+Every surface is built: the settings shell with Providers, Models and API Keys; the
+Spend Guard dashboard and its history; Configuration, Git Tools, JSON, Request Dumps,
+Dev Tools, Bin and the Danger Zone; and the Git AI sidebar.
+
+`src/styles/cak.css` is **extracted verbatim from the approved UI mock** and is the
+specification, not a starting point. Components in `src/ui/` emit that markup unchanged,
+so what renders is what was signed off. Add a primitive rather than restyling inline.
+
+There are no emoji anywhere in the UI. They render differently on every platform, sit off
+the baseline of the text beside them, and cannot take the theme's colour — the stroked set
+in `src/icons.tsx` replaces them.
+
+Run **Copilot Adapter Kit: Open UI Parity Harness** from an Extension Development Host to
+render every primitive side by side against the mock. It is registered only in development.
+
+**Tests run locally, not in CI.** Nothing here is wired to GitHub Actions — the only
+workflow is the publish job on a `v*` tag. Run `npm run test:all` before pushing.
+
+`webview-ui/e2e/` drives the real screens in Chromium against the Vite dev server: filters
+narrow lists, menu entries fire, a destructive action asks before it acts, a hold has to be
+held, the drawer opens at 330 px and drags. They assert behaviour, not screenshots, so they
+do not break when a colour changes. First run needs the browser:
+`npx --prefix webview-ui playwright install chromium`.
+
+`test/message-contract.test.js` checks that every message the UI can post has a handler
+on the extension side, and that no action or handler has gone stale. That is the failure
+the tests exist to prevent: a control that looks fine and silently does nothing.
+
+`npm run watch:webview` serves the screens in a plain browser for design work. With no
+extension host to answer, they fall back to sample data from `src/app/fixture.ts` — every
+such page carries an amber **Sample data** bar, and the fixture is dropped from the
+production bundle by `import.meta.env.DEV`.
+
+---
+
+## Spend Guard
+
+BYOK means the bill is yours. GitHub Copilot ships with a ceiling you have to deliberately raise; this adapter does the same, and it is **on by default**.
+
+Every request is checked *before it leaves your machine*. A blocked request is never sent, so it costs nothing.
+
+| Limit | Default | What it stops |
+|---|---|---|
+| `budget.dailyTokenLimit` | `2,000,000` tokens/day | Total input + output across all providers |
+| `budget.dailyCostLimitUsd` | `$25`/day | Estimated spend, from each model's `pricing` string |
+| `budget.maxInputTokensPerRequest` | `200,000` tokens | One oversized request blowing the budget |
+| `budget.maxOutputTokens` | `0` → the model's `maxOut` | Unbounded generation — output is **never** uncapped |
+| `budget.maxTurnsPerConversation` | `50` requests | **Runaway agent loops** |
+
+That last one matters most. In agent mode every tool round-trip resends the whole conversation, so a loop left running overnight can burn tens of millions of tokens on its own. The turn guard cuts it off.
+
+Usage is recorded from the provider's own usage stream where available, and from a deliberately conservative estimate where it is not. The status bar shows today's total; click it for a per-model breakdown.
+
+```
+$(cak-icon) 412.3K · $1.87        ← normal
+$(cak-icon) 1.71M · $22.40        ← amber at 80%
+$(cak-icon) 2.00M · $25.00        ← red, requests blocked
+$(cak-icon) ⚠ UNCAPPED 8.4M       ← red, no protection at all
+```
+
+### Turning it off
+
+`Copilot Adapter Kit: Disable Spend Guard` removes every limit above. It requires a modal confirmation *and* typing `DISABLE`, and the status bar stays red for as long as protection is off. Only do this when you are watching the run.
+
+Re-enable with `Copilot Adapter Kit: Enable Spend Guard`, or from the **Spend Guard** tab in the panel.
+
+### Limits are per calendar day
+
+Counters reset at local midnight. `Copilot Adapter Kit: Reset Today's Usage` zeroes them early — it clears the local counters only; your provider has still billed what was already spent.
+
+Set any limit to `0` to disable that one check individually while leaving the rest in force.
+
+---
+
 ## Commands
 
 All commands available via `Cmd+Shift+P` under `Copilot Adapter Kit:`.
@@ -213,6 +330,10 @@ All commands available via `Cmd+Shift+P` under `Copilot Adapter Kit:`.
 | **Open Settings** | Jump to raw JSON settings |
 | **Show Logs** | Open the output channel |
 | **Open Dumps Folder** | Reveal request dumps in Finder |
+| **Show Token Usage** | Today's spend, per model, with the active limits |
+| **Reset Today's Usage** | Zero the local usage counters |
+| **Disable Spend Guard** | ⚠️ Remove all spend limits (double confirmation) |
+| **Enable Spend Guard** | Restore the default protection |
 
 ---
 
@@ -435,6 +556,21 @@ All settings under `copilot-adapter-kit.*`.
       "visionFallback": "openai:gpt-5.2"
     }
   }
+}
+```
+
+### `budget.*`
+
+Spend Guard limits — see [Spend Guard](#spend-guard).
+
+```jsonc
+{
+  "copilot-adapter-kit.budget.enforce": true,
+  "copilot-adapter-kit.budget.dailyTokenLimit": 2000000,
+  "copilot-adapter-kit.budget.dailyCostLimitUsd": 25,
+  "copilot-adapter-kit.budget.maxInputTokensPerRequest": 200000,
+  "copilot-adapter-kit.budget.maxOutputTokens": 0,
+  "copilot-adapter-kit.budget.maxTurnsPerConversation": 50
 }
 ```
 
