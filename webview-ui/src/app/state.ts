@@ -69,6 +69,7 @@ export interface BudgetSnapshot {
     byModel: Record<string, { inputTokens: number; outputTokens: number; costUsd: number; requests: number }>;
     /** Tokens per local hour, 24 entries. Drives the burn curve. */
     hourly: number[];
+    hourlyCost: number[];
     refusals: { at: number; reason: string; modelId: string; estimatedInput: number }[];
   };
   /** Finished days, oldest first. */

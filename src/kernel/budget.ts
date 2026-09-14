@@ -44,6 +44,8 @@ export interface LedgerDay {
   byModel: Record<string, ModelSpend>;
   /** Tokens spent in each hour of the day, local time. Drives the burn curve. */
   hourly: number[];
+  /** Cost in each hour, so the hover can draw the day's shape rather than a fill. */
+  hourlyCost: number[];
   /** Most recent refusals, newest first. Capped — this is a feed, not a log. */
   refusals: Refusal[];
 }
@@ -236,6 +238,7 @@ export class BudgetLedger {
     // Bucket by local hour so the burn curve can be drawn against the ceiling.
     const hour = new Date().getHours();
     this.day.hourly[hour] = (this.day.hourly[hour] ?? 0) + entry.inputTokens + entry.outputTokens;
+    this.day.hourlyCost[hour] = (this.day.hourlyCost[hour] ?? 0) + cost;
 
     const m = this.day.byModel[entry.modelId] ??= { inputTokens: 0, outputTokens: 0, costUsd: 0, requests: 0 };
     m.inputTokens += entry.inputTokens;
@@ -331,7 +334,8 @@ function _today(): string {
 function _emptyDay(): LedgerDay {
   return {
     day: _today(), inputTokens: 0, outputTokens: 0, costUsd: 0, requests: 0, blocked: 0,
-    estimated: false, byModel: {}, hourly: new Array(24).fill(0), refusals: [],
+    estimated: false, byModel: {},
+    hourly: new Array(24).fill(0), hourlyCost: new Array(24).fill(0), refusals: [],
   };
 }
 
@@ -346,6 +350,8 @@ function _normalise(d: Partial<LedgerDay>): LedgerDay {
     estimated: d.estimated ?? false,
     byModel: d.byModel ?? {},
     hourly: Array.isArray(d.hourly) && d.hourly.length === 24 ? d.hourly : new Array(24).fill(0),
+    hourlyCost: Array.isArray(d.hourlyCost) && d.hourlyCost.length === 24
+      ? d.hourlyCost : new Array(24).fill(0),
     refusals: d.refusals ?? [],
   };
 }

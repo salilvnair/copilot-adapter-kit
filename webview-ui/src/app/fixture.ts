@@ -77,6 +77,8 @@ export const FIXTURE: AppState = {
       estimated: false,
       hourly: [3_000, 2_000, 180_000, 520_000, 540_000, 530_000, 190_000, 12_000,
                8_000, 14_000, 3_000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      hourlyCost: [0.02, 0.01, 1.7, 4.9, 5.1, 5.0, 1.8, 0.1,
+                   0.07, 0.13, 0.03, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       refusals: [
         { at: Date.now() - 30 * 60_000, reason: 'Daily token budget reached — 2.00M of 2.00M tokens used today.', modelId: 'deepseek-reasoner', estimatedInput: 118_000 },
         { at: Date.now() - 95 * 60_000, reason: 'Agent loop guard — 50 requests already sent for this conversation (limit 50).', modelId: 'deepseek-reasoner', estimatedInput: 121_000 },

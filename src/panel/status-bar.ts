@@ -66,8 +66,12 @@ export function buildTooltip(s: BudgetStatus): vscode.MarkdownString {
 `);
   }
 
-  _meter(md, 'Tokens', tokenPct, `${_fmt(used)}${s.caps.dailyTokenLimit > 0 ? ` of ${_fmt(s.caps.dailyTokenLimit)}` : ''}`, _resetsAt());
-  _meter(md, 'Cost', costPct, `$${s.day.costUsd.toFixed(2)}${s.caps.dailyCostLimitUsd > 0 ? ` of $${s.caps.dailyCostLimitUsd.toFixed(2)}` : ''}`);
+  _meter(md, 'Tokens', tokenPct,
+    `${_fmt(used)}${s.caps.dailyTokenLimit > 0 ? ` of ${_fmt(s.caps.dailyTokenLimit)}` : ''}`,
+    s.day.hourly, _resetsAt());
+  _meter(md, 'Cost', costPct,
+    `$${s.day.costUsd.toFixed(2)}${s.caps.dailyCostLimitUsd > 0 ? ` of $${s.caps.dailyCostLimitUsd.toFixed(2)}` : ''}`,
+    s.day.hourlyCost);
 
   md.appendMarkdown(`---
 
@@ -104,29 +108,56 @@ export function buildTooltip(s: BudgetStatus): vscode.MarkdownString {
   return md;
 }
 
-/** A labelled percentage with a bar, the way the Copilot hover reads. */
-function _meter(md: vscode.MarkdownString, label: string, pct: number, detail: string, note?: string): void {
-  if (pct < 0) {
-    md.appendMarkdown(`**${label}** &nbsp; \`no limit\`
-
-${detail}
-
-`);
-    return;
-  }
-  const filled = Math.max(0, Math.min(20, Math.round((pct / 100) * 20)));
-  const bar = '█'.repeat(filled) + '░'.repeat(20 - filled);
+/**
+ * A labelled budget: percentage, figures, and the day's shape as a sparkline.
+ *
+ * The sparkline is the real hourly series, not a fill of the percentage — a bar
+ * that is 74% full tells you the same thing the number already did, whereas the
+ * shape says whether it crept up all day or arrived in one burst at 3am. That
+ * distinction is the whole reason the guard exists.
+ */
+function _meter(
+  md: vscode.MarkdownString,
+  label: string,
+  pct: number,
+  detail: string,
+  series: number[],
+  note?: string,
+): void {
   md.appendMarkdown(`| | |
 |:--|--:|
 | **${label}** | ${note ?? ''} |
 
 `);
-  md.appendMarkdown(`**${Math.round(pct)}%** used &nbsp; &nbsp; ${detail}
+
+  const headline = pct < 0 ? '`no limit`' : `**${Math.round(pct)}%** used`;
+  md.appendMarkdown(`${headline} &nbsp; &nbsp; ${detail}
 
 `);
-  md.appendMarkdown(`\`${bar}\`
+
+  const spark = _sparkline(series);
+  if (spark) md.appendMarkdown(`\`${spark}\` &nbsp; <sub>00:00 → now</sub>
 
 `);
+  else md.appendMarkdown(`<sub>Nothing spent yet today.</sub>
+
+`);
+}
+
+/** Eight levels of block, one cell per hour elapsed. */
+const SPARK = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+function _sparkline(series: number[]): string {
+  if (!Array.isArray(series) || series.length === 0) return '';
+  // Only as far as the day has got — trailing zeros would read as a long quiet
+  // spell rather than hours that have not happened.
+  const upto = Math.min(series.length - 1, new Date().getHours());
+  const window = series.slice(0, upto + 1);
+  const max = Math.max(...window);
+  if (max <= 0) return '';
+  return window
+    .map(v => SPARK[Math.min(SPARK.length - 1, Math.max(0, Math.round((v / max) * (SPARK.length - 1))))])
+    .join('');
 }
 
 /** Local midnight, phrased the way Copilot phrases its own reset. */
