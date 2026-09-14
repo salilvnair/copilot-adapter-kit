@@ -104,7 +104,7 @@ table.models .num{text-align:right}
 .feed-row:last-child{border-bottom:none}
 .feed-time{font-size:11px;color:var(--c-muted);flex:none;width:42px}
 .feed-txt{font-size:12px;min-width:0}
-.feed-txt .sub{color:var(--c-muted);font-size:11px}
+.feed-txt .sub{display:block;color:var(--c-muted);font-size:11px;margin-top:1px}
 .danger-zone{border:1px solid var(--c-error);border-radius:10px;padding:14px 16px;
   background:rgba(239,68,68,.06);display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .hold{position:relative;overflow:hidden}

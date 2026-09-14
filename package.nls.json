@@ -25,6 +25,7 @@
   "copilot-adapter-kit.config.models": "Add custom models. Each entry needs id and family. Matches providers by family name.",
   "copilot-adapter-kit.config.hiddenBuiltins": "Specific built-in model IDs to hide from the picker. Use the Open Panel UI to manage this visually.",
   "copilot-adapter-kit.config.modelOverrides": "Per-model overrides (name, maxIn, maxOut, etc.) for built-in models. Managed via the panel UI.",
+  "copilot-adapter-kit.command.statusMenu": "Copilot Adapter Kit: Open Status Menu",
   "copilot-adapter-kit.command.showUsage": "Copilot Adapter Kit: Show Token Usage",
   "copilot-adapter-kit.command.resetBudget": "Copilot Adapter Kit: Reset Today's Usage",
   "copilot-adapter-kit.command.disableSpendGuard": "Copilot Adapter Kit: Disable Spend Guard (Dangerous)",

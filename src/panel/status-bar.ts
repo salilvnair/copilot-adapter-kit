@@ -18,6 +18,7 @@
 
 import vscode from 'vscode';
 import type { BudgetStatus } from '../kernel/budget';
+import { clockHour, fmtCompact, peakHour, resetsIn, sparkline } from './spark';
 
 export function paintStatus(item: vscode.StatusBarItem, s: BudgetStatus): void {
   const used = s.day.inputTokens + s.day.outputTokens;
@@ -72,8 +73,8 @@ export function buildTooltip(s: BudgetStatus): vscode.MarkdownString {
   rows.push(['', '']);
   _budget(rows, 'Tokens',
     s.caps.dailyTokenLimit > 0 ? s.tokenPct : -1,
-    _fmt(used),
-    s.caps.dailyTokenLimit > 0 ? _fmt(s.caps.dailyTokenLimit) : '',
+    fmtCompact(used),
+    s.caps.dailyTokenLimit > 0 ? fmtCompact(s.caps.dailyTokenLimit) : '',
     s.day.hourly);
   _budget(rows, 'Cost',
     s.caps.dailyCostLimitUsd > 0 ? s.costPct : -1,
@@ -92,7 +93,7 @@ export function buildTooltip(s: BudgetStatus): vscode.MarkdownString {
   rows.push(['Guard', s.caps.enforce
     ? (s.overLimit ? '$(error) Blocking' : '$(shield) Protected')
     : '$(alert) Off']);
-  rows.push(['Resets', _resetsIn()]);
+  rows.push(['Resets', resetsIn()]);
 
   rows.push(['', '']);
   rows.push([`[Reset today's counters](command:copilot-adapter-kit.resetBudget)`, '']);
@@ -126,56 +127,22 @@ function _budget(
   rows.push([`**${label}**`, figures]);
 
   // Nothing has run: a flat line along the bottom would read as data.
-  const spark = _sparkline(series);
+  const spark = sparkline(series);
   if (!spark) return;
 
   const pctText = pct < 0 ? 'uncapped' : `${Math.round(pct)}%`;
-  rows.push([`\`${spark}\``, `${pctText}${_peak(series)}`]);
+  rows.push([`\`${spark}\``, `${pctText}${_peakLabel(series)}`]);
 }
 
-/** Eight levels of block, one cell per hour elapsed. */
-const SPARK = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-
-function _sparkline(series: number[]): string {
-  if (!Array.isArray(series) || series.length === 0) return '';
-  // Only as far as the day has got — trailing zeros would read as a long quiet
-  // spell rather than hours that have not happened.
-  const upto = Math.min(series.length - 1, new Date().getHours());
-  const window = series.slice(0, upto + 1);
-  const max = Math.max(...window);
-  if (max <= 0) return '';
-  return window
-    .map(v => SPARK[Math.min(SPARK.length - 1, Math.max(0, Math.round((v / max) * (SPARK.length - 1))))])
-    .join('');
-}
-
-/** The hour that took the most, which is the question a spike raises. */
-function _peak(series: number[]): string {
-  const upto = Math.min(series.length - 1, new Date().getHours());
-  let hour = -1, max = 0;
-  for (let h = 0; h <= upto; h++) {
-    if ((series[h] ?? 0) > max) { max = series[h]; hour = h; }
-  }
-  return hour < 0 ? '' : ` · peak ${String(hour).padStart(2, '0')}:00`;
-}
-
-/** Time left in the day, which is more use than the wall-clock midnight. */
-function _resetsIn(): string {
-  const midnight = new Date();
-  midnight.setHours(24, 0, 0, 0);
-  const mins = Math.max(0, Math.round((midnight.getTime() - Date.now()) / 60_000));
-  const h = Math.floor(mins / 60);
-  return h > 0 ? `in ${h}h ${mins % 60}m` : `in ${mins}m`;
-}
 
 /** A pipe inside a cell would end the column early. */
 function _cell(text: string): string {
   return text.replace(/\|/g, '\\|').slice(0, 40);
 }
 
-function _fmt(n: number): string {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
-  return String(Math.round(n));
+
+/** " · peak 14:00", or nothing if the day is still empty. */
+function _peakLabel(series: number[]): string {
+  const h = peakHour(series);
+  return h < 0 ? '' : ` · peak ${clockHour(h)}`;
 }

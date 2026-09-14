@@ -3,6 +3,7 @@ import vscode from 'vscode';
 import { fmtTokens, type BudgetStatus } from './kernel/budget';
 import { Context } from './kernel/context';
 import { paintStatus } from './panel/status-bar';
+import { showStatusMenu } from './panel/status-menu';
 import { closeDb, initDb, insertUiAudit, pruneAudit } from './storage/db';
 import { MiniGitPanel } from './panel/MiniGitPanel';
 import { SettingsPanel } from './panel/SettingsPanel';
@@ -22,9 +23,10 @@ export async function activate(ext: vscode.ExtensionContext): Promise<void> {
   const ctx = await Context.bootstrap(ext);
   instance = ctx;
 
-  // Status bar entry — live spend readout, click to open usage
+  // Status bar entry — live spend readout. Hovering is the glance; clicking
+  // opens the menu, which is where anything you can act on lives.
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  status.command = 'copilot-adapter-kit.showUsage';
+  status.command = 'copilot-adapter-kit.statusMenu';
   const paint = (s: BudgetStatus) => paintStatus(status, s);
   paint(ctx.budget.status());
   status.show();
@@ -45,6 +47,7 @@ export async function activate(ext: vscode.ExtensionContext): Promise<void> {
       (vscode.window as any).showOutputChannel?.() || ctx.tracer.info('')),
     vscode.commands.registerCommand('copilot-adapter-kit.openDumps',     () => ctx.tracer.openDumpsFolder()),
     vscode.commands.registerCommand('copilot-adapter-kit.generateCommitMessage', () => _generateCommitMessage(ext, ctx)),
+    vscode.commands.registerCommand('copilot-adapter-kit.statusMenu',         () => showStatusMenu(ctx)),
     vscode.commands.registerCommand('copilot-adapter-kit.showUsage',          () => SpendGuardPanel.show(ext, ctx)),
     vscode.commands.registerCommand('copilot-adapter-kit.resetBudget',        () => _resetBudget(ctx)),
     vscode.commands.registerCommand('copilot-adapter-kit.disableSpendGuard',  () => _setSpendGuard(ctx, false)),
@@ -67,7 +70,7 @@ export async function activate(ext: vscode.ExtensionContext): Promise<void> {
 
   if (!ctx.budget.caps.enforce) {
     void vscode.window.showWarningMessage(
-      '⚠️ Copilot Adapter Kit: the spend guard is OFF. Requests are uncapped and can run up unlimited provider charges.',
+      'Copilot Adapter Kit: the spend guard is OFF. Requests are uncapped and can run up unlimited provider charges.',
       'Re-enable',
     ).then(c => { if (c === 'Re-enable') void vscode.commands.executeCommand('copilot-adapter-kit.enableSpendGuard'); });
   }

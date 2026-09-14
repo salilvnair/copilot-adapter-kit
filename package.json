@@ -107,6 +107,10 @@
         "title": "%copilot-adapter-kit.command.generateCommitMessage%"
       },
       {
+        "command": "copilot-adapter-kit.statusMenu",
+        "title": "%copilot-adapter-kit.command.statusMenu%"
+      },
+      {
         "command": "copilot-adapter-kit.showUsage",
         "title": "%copilot-adapter-kit.command.showUsage%"
       },
