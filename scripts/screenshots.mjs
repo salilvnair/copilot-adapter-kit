@@ -8,7 +8,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '../webview-ui/node_modules/playwright-core/index.mjs';
@@ -24,8 +24,12 @@ let shot = 0;
 const pad = () => String(++shot).padStart(2, '0');
 
 async function main() {
-  rmSync(OUT, { recursive: true, force: true });
+  // Only the images: the folder also holds a hand-written index, and wiping the
+  // directory wholesale deleted it on every run.
   mkdirSync(OUT, { recursive: true });
+  for (const f of readdirSync(OUT)) {
+    if (f.endsWith('.png')) rmSync(join(OUT, f), { force: true });
+  }
 
   const server = await startServer();
   const browser = await chromium.launch();
