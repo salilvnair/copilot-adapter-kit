@@ -68,3 +68,6 @@ webview-ui/playwright-report/
 webview-ui/blob-report/
 webview-ui/.playwright/
 media/sql-wasm.wasm
+
+# Demo video renders — regenerate with `npm run showcase`
+scripts/demo-video/.output/

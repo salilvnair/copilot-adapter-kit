@@ -1,0 +1,144 @@
+{
+  "appUrl": "http://localhost:5173",
+
+  "intro": {
+    "enabled": true,
+    "title": "Copilot Adapter Kit",
+    "tagline": "Bring your own model to Copilot Chat — with a spend guard in front of it.",
+    "badges": ["Spend Guard", "Any OpenAI API", "Audit Log", "Git AI", "Vision", "Local models"],
+    "accentColor": "#6366f1",
+    "effect": "static",
+    "holdSec": 2.5
+  },
+
+  "segments": [
+    {
+      "id": "spend_guard",
+      "label": "The reason it exists",
+      "recipe": "spendGuardToday",
+      "effect": "zoom-in",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "limits",
+      "label": "Limits applied before the request is sent",
+      "recipe": "limits",
+      "effect": "zoom-in-bottom-left",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "history",
+      "label": "Fourteen weeks of it",
+      "recipe": "spendGuardHistory",
+      "effect": "tilt-top-down",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "providers",
+      "label": "Every provider state at once",
+      "recipe": "providers",
+      "effect": "pan-left-right",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "add_provider",
+      "label": "Adding one",
+      "recipe": "addProvider",
+      "effect": "zoom-in-top-right",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "models",
+      "label": "What the Copilot picker will show",
+      "recipe": "models",
+      "effect": "zoom-in",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "api_keys",
+      "label": "Keys, never shown back",
+      "recipe": "apiKeys",
+      "effect": "tilt-bottom-up",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "audit_log",
+      "label": "One row per call and per action",
+      "recipe": "auditLog",
+      "effect": "static",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "audit_record",
+      "label": "A record, whole",
+      "recipe": "auditRecord",
+      "effect": "zoom-in-top-left",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "audit_config",
+      "label": "What gets written down",
+      "recipe": "auditConfig",
+      "effect": "tilt-top-down",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "db_explorer",
+      "label": "The store underneath",
+      "recipe": "dbExplorer",
+      "effect": "pan-right-left",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "configuration",
+      "label": "Each setting, and what it costs",
+      "recipe": "configuration",
+      "effect": "zoom-in",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "git_tools",
+      "label": "Commit messages, priced first",
+      "recipe": "gitTools",
+      "effect": "zoom-in-bottom-right",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "sidebar",
+      "label": "In the sidebar, at 340px",
+      "recipe": "sidebar",
+      "effect": "zoom-in",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "danger_zone",
+      "label": "Nothing destructive on one click",
+      "recipe": "dangerZone",
+      "effect": "tilt-bottom-up",
+      "trimStartSec": 1.5
+    },
+    {
+      "id": "command_palette",
+      "label": "Ctrl K — everything",
+      "recipe": "commandPalette",
+      "effect": "static",
+      "trimStartSec": 1.2
+    }
+  ],
+
+  "highlights": ["spend_guard", "limits", "command_palette"],
+
+  "transitions": {
+    "type": "fade",
+    "durationSec": 0.6
+  },
+
+  "output": {
+    "name": "copilot-adapter-kit-showcase",
+    "width": 1440,
+    "height": 900,
+    "fps": 25,
+    "gif": { "width": 800, "fps": 12 },
+    "gifHighlights": { "width": 600, "fps": 8 }
+  }
+}
