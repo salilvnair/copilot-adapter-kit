@@ -83,3 +83,43 @@ test('the panel follows the editor back to dark', async ({ page }) => {
   await page.evaluate(() => document.body.classList.remove('vscode-light'));
   await expect(page.locator('html')).not.toHaveClass(/vscode-light/);
 });
+
+test('the theme button cycles auto, light, dark and remembers the choice', async ({ page }) => {
+  await page.goto('/settings.html');
+  await ready(page);
+
+  const button = page.locator('.set-top button[aria-label^="Theme:"]');
+  await expect(button).toHaveAttribute('aria-label', /following the editor/);
+  const startedDark = await page.locator('html').evaluate(el => !el.classList.contains('is-light'));
+  expect(startedDark).toBe(true);
+
+  await button.click();                                   // auto → light
+  await expect(button).toHaveAttribute('aria-label', /Theme: light/);
+  await expect(page.locator('html')).toHaveClass(/is-light/);
+
+  await button.click();                                   // light → dark
+  await expect(button).toHaveAttribute('aria-label', /Theme: dark/);
+  await expect(page.locator('html')).not.toHaveClass(/is-light/);
+
+  // The choice survives a reload.
+  await page.reload();
+  await ready(page);
+  await expect(page.locator('.set-top button[aria-label^="Theme:"]'))
+    .toHaveAttribute('aria-label', /Theme: dark/);
+
+  await page.locator('.set-top button[aria-label^="Theme:"]').click();  // dark → auto
+  await expect(page.locator('.set-top button[aria-label^="Theme:"]'))
+    .toHaveAttribute('aria-label', /following the editor/);
+});
+
+test('an explicit light choice beats a dark editor', async ({ page }) => {
+  await page.goto('/settings.html');
+  await ready(page);
+  await page.locator('.set-top button[aria-label^="Theme:"]').click();   // light
+  await expect(page.locator('html')).toHaveClass(/is-light/);
+
+  // The editor stays dark; the explicit choice must win.
+  await page.evaluate(() => document.body.classList.remove('vscode-light'));
+  await page.waitForTimeout(200);
+  await expect(page.locator('html')).toHaveClass(/is-light/);
+});

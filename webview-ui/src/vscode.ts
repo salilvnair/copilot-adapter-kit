@@ -47,23 +47,76 @@ export function onMessage(handler: (msg: { type: string; payload?: unknown }) =>
   return () => window.removeEventListener('message', listener);
 }
 
-/** Keep `is-light` in step with the editor theme. Call once at boot. */
-export function syncTheme(): void {
-  const apply = () => {
-    const light = document.body.classList.contains('vscode-light')
-      || document.body.classList.contains('vscode-high-contrast-light');
-    document.body.classList.toggle('is-light', light);
+/* ── Theme ────────────────────────────────────────────────────────────── */
 
-    // Also on the root element. dui declares aliases such as
-    // `--color-btn-secondary-bg: var(--color-surface-hover)` on :root, and a
-    // custom property resolves where it is declared — so with the theme class
-    // only on <body>, those aliases kept their dark values while everything
-    // around them went light.
-    document.documentElement.classList.toggle('vscode-light', light);
-    document.documentElement.classList.toggle('is-light', light);
-  };
-  apply();
-  new MutationObserver(apply).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+export type ThemeMode = 'auto' | 'light' | 'dark';
+
+const THEME_KEY = 'cak.themeMode';
+let mode: ThemeMode = 'auto';
+const watchers = new Set<(m: ThemeMode) => void>();
+
+function editorIsLight(): boolean {
+  return document.body.classList.contains('vscode-light')
+    || document.body.classList.contains('vscode-high-contrast-light');
+}
+
+function paint(): void {
+  const light = mode === 'auto' ? editorIsLight() : mode === 'light';
+
+  // The class goes on the root element as well as the body. dui declares
+  // aliases such as `--color-btn-secondary-bg: var(--color-surface-hover)` on
+  // :root, and a custom property resolves where it is declared — with the class
+  // only on <body> those aliases kept their dark values on a light panel.
+  for (const el of [document.documentElement, document.body]) {
+    el.classList.toggle('is-light', light);
+    el.classList.toggle('vscode-light', light);
+  }
+  if (!light) {
+    document.documentElement.classList.remove('vscode-light');
+    // Leave the editor's own class on <body> alone when following it.
+    if (mode === 'dark') document.body.classList.remove('vscode-light');
+  }
+}
+
+/** The current preference: follow the editor, or an explicit choice. */
+export function themeMode(): ThemeMode {
+  return mode;
+}
+
+/** Set the preference, apply it, and remember it for next time. */
+export function setThemeMode(next: ThemeMode): void {
+  mode = next;
+  try {
+    const api = vscode();
+    api?.setState({ ...(api.getState() as Record<string, unknown> ?? {}), [THEME_KEY]: next });
+  } catch { /* no host, or state unavailable */ }
+  try { localStorage.setItem(THEME_KEY, next); } catch { /* private mode */ }
+  paint();
+  for (const w of watchers) w(next);
+}
+
+export function onThemeMode(fn: (m: ThemeMode) => void): () => void {
+  watchers.add(fn);
+  return () => watchers.delete(fn);
+}
+
+/** Keep the theme in step with the editor. Call once at boot. */
+export function syncTheme(): void {
+  const stored = (() => {
+    try {
+      const fromHost = (vscode()?.getState() as Record<string, unknown> | undefined)?.[THEME_KEY];
+      if (fromHost === 'light' || fromHost === 'dark' || fromHost === 'auto') return fromHost;
+      const fromLocal = localStorage.getItem(THEME_KEY);
+      if (fromLocal === 'light' || fromLocal === 'dark' || fromLocal === 'auto') return fromLocal;
+    } catch { /* fall through */ }
+    return 'auto' as const;
+  })();
+  mode = stored;
+  paint();
+
+  // While following the editor, react to it changing.
+  new MutationObserver(() => { if (mode === 'auto') paint(); })
+    .observe(document.body, { attributes: true, attributeFilter: ['class'] });
 }
 
 /** Mount helper shared by every entry.

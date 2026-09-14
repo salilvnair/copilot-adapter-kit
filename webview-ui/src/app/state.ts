@@ -79,6 +79,47 @@ export interface BudgetSnapshot {
   nearLimit: boolean;
 }
 
+export interface AuditRow {
+  audit_id: number;
+  conversation_id: string;
+  stage: string;
+  provider?: string;
+  model?: string;
+  system_prompt?: string;
+  user_prompt?: string;
+  request_payload?: string;
+  response_payload?: string;
+  meta?: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  cost_usd?: number;
+  duration_ms?: number;
+  error?: string;
+  created_at: string;
+}
+
+export interface UiAuditRow {
+  id: number;
+  event_type: string;
+  module: string;
+  button?: string;
+  action?: string;
+  metadata?: string;
+  created_at: string;
+}
+
+export interface AuditSnapshot {
+  /** False when SQLite could not start — everything else keeps working. */
+  ok: boolean;
+  error?: string;
+  path: string;
+  sizeBytes?: number;
+  recordBodies: boolean;
+  counts: { ai: number; ui: number };
+  ai: AuditRow[];
+  ui: UiAuditRow[];
+}
+
 export interface EngineFamily {
   family: string;
   label: string;
@@ -97,6 +138,7 @@ export interface AppState {
   hiddenCustomModels: string[];
   engineFamilies: EngineFamily[];
   budget?: BudgetSnapshot;
+  audit?: AuditSnapshot;
   maxTokens: number;
   logLevel: string;
   stabilizeTools?: boolean;
@@ -165,6 +207,9 @@ export const actions = {
   openSettings: () => post('openSettings'),
   openSpendGuard: () => post('openSpendGuard'),
   resetBudget: () => post('resetBudget'),
+  loadAudit: () => post('loadAudit'),
+  clearAudit: () => post('clearAudit'),
+  exportAudit: () => post('exportAudit'),
   openDumps: () => post('openDumps'),
   restoreProvider: (uuid: string) => post('restoreProvider', { uuid }),
   permDeleteProvider: (uuid: string) => post('permDeleteProvider', { uuid }),

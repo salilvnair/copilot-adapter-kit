@@ -11,6 +11,10 @@ import { BUILTIN_CATALOG } from '../conduit/model-catalog';
 import { KNOWN_FAMILIES } from '../kernel/families';
 import { Context } from '../kernel/context';
 import type { Payload, StreamEvents } from '../mesh/contract';
+import {
+  auditCounts, clearAuditEntries, clearUiAuditEntries, dbStatus,
+  getAuditEntries, getUiAuditEntries, insertUiAudit,
+} from '../storage/db';
 import { WebviewHost } from './webview-host';
 
 export class SettingsPanel {
@@ -66,6 +70,18 @@ export class SettingsPanel {
       switch (msg.type) {
         case 'getState':
           await this._sendState();
+          break;
+        case 'loadAudit':
+          await this._sendState();
+          break;
+        case 'clearAudit':
+          clearAuditEntries();
+          clearUiAuditEntries();
+          insertUiAudit({ event_type: 'audit.clear', module: 'audit' });
+          await this._sendState();
+          break;
+        case 'exportAudit':
+          await this._exportAudit();
           break;
         case 'testProvider':
           await this._probeAll(msg.payload?.uuid);
@@ -245,6 +261,7 @@ export class SettingsPanel {
         // hard-coded in the markup and read "v0.1" three releases late.
         version: this.ext.extension.packageJSON.version as string,
         health: this.ctx?.health.all ?? {},
+        audit: _auditSnapshot(),
         builtinModels, copilotModels,
         engineFamilies: KNOWN_FAMILIES.map(f => ({ family: f.family, label: f.label, defaultUrl: f.defaultUrl, desc: f.desc })),
       },
@@ -276,6 +293,26 @@ export class SettingsPanel {
       await config.update(k, undefined, vscode.ConfigurationTarget.Global);
     }
     await this._sendState();
+  }
+
+  /** Write the whole log out as JSON, wherever the user chooses. */
+  private async _exportAudit(): Promise<void> {
+    const target = await vscode.window.showSaveDialog({
+      title: 'Export the audit log',
+      defaultUri: vscode.Uri.file(`cak-audit-${new Date().toISOString().slice(0, 10)}.json`),
+      filters: { JSON: ['json'] },
+    });
+    if (!target) return;
+
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      database: dbStatus().path,
+      calls: getAuditEntries(10_000),
+      actions: getUiAuditEntries(10_000),
+    };
+    await vscode.workspace.fs.writeFile(target, Buffer.from(JSON.stringify(payload, null, 2), 'utf-8'));
+    insertUiAudit({ event_type: 'audit.export', module: 'audit', action: target.fsPath });
+    void vscode.window.showInformationMessage(`Audit log written to ${target.fsPath}`);
   }
 
   /**
@@ -872,4 +909,25 @@ function _buildMissing(message: string): string {
 <p style="color:#a9a9a9;margin:0 0 14px">${message}</p>
 <pre style="background:#181818;border:1px solid #414141;border-radius:8px;padding:12px">npm run compile</pre>
 </body></html>`;
+}
+
+/** What the audit screen renders. Bounded, so a long history cannot stall the panel. */
+function _auditSnapshot() {
+  const status = dbStatus();
+  if (!status.ok) {
+    return {
+      ok: false, error: status.error, path: status.path,
+      recordBodies: false, counts: { ai: 0, ui: 0 }, ai: [], ui: [],
+    };
+  }
+  return {
+    ok: true,
+    path: status.path,
+    sizeBytes: status.sizeBytes,
+    recordBodies: vscode.workspace.getConfiguration('copilot-adapter-kit')
+      .get<boolean>('audit.recordBodies', false),
+    counts: auditCounts(),
+    ai: getAuditEntries(200),
+    ui: getUiAuditEntries(200),
+  };
 }

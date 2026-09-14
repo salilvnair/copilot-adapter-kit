@@ -588,3 +588,40 @@ body.dui{margin:0;background:var(--c-panel)}
 .dui .dui_button--ghost:not(:disabled):hover{background:var(--c-surface-hover)}
 .dui .dui_icon-button{color:var(--c-text-2)}
 .dui .dui_icon-button:not(:disabled):hover{background:var(--c-surface-hover);color:var(--c-text)}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Audit log — dense rows that expand into the whole record.
+ * ───────────────────────────────────────────────────────────────────────────── */
+.dui .cak-count{
+  font-size:10px;font-family:"JetBrains Mono",monospace;padding:1px 5px;border-radius:4px;
+  background:rgba(125,125,140,.14);color:var(--c-muted);border:none;flex:none;line-height:1.4;
+}
+.dui .dtbl.audit td{white-space:nowrap;vertical-align:middle}
+.dui .audit-row{cursor:pointer}
+.dui .audit-row:hover td{background:var(--c-surface-hover)}
+.dui .audit-row.is-open td{border-bottom-color:transparent}
+.dui .audit-stage{
+  display:inline-block;font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;
+  padding:1px 6px;border-radius:9px;border:1px solid transparent;
+}
+.dui .audit-detail td{padding:0 8px 12px;white-space:normal}
+.dui .audit-panels{display:flex;flex-direction:column;gap:9px;padding:4px 2px 2px}
+.dui .audit-panel{border:1px solid var(--c-surface-border);border-radius:8px;background:var(--c-panel);overflow:hidden}
+.dui .audit-panel__h{
+  padding:6px 10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--c-muted);border-bottom:1px solid var(--c-surface-border);
+}
+.dui .audit-body{
+  margin:0;padding:9px 10px;font-size:11px;line-height:1.6;color:var(--c-text-2);
+  max-height:230px;overflow:auto;white-space:pre-wrap;word-break:break-word;
+}
+.dui .audit-kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:2px 14px;padding:9px 10px}
+.dui .audit-kv > div{display:flex;gap:8px;font-size:11px;padding:2px 0}
+.dui .audit-kv .k{color:var(--c-muted);min-width:88px}
+.dui .audit-kv .v{color:var(--c-text);word-break:break-all}
+.dui .audit-note{
+  display:flex;gap:9px;align-items:flex-start;font-size:11px;line-height:1.55;
+  color:var(--c-muted);border:1px solid var(--c-surface-border);border-radius:8px;
+  padding:8px 11px;background:var(--c-elevated);
+}
+.dui .audit-note > span:nth-child(2){flex:1;min-width:0}

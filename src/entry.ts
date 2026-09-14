@@ -2,6 +2,7 @@
 import vscode from 'vscode';
 import { fmtTokens, type BudgetStatus } from './kernel/budget';
 import { Context } from './kernel/context';
+import { closeDb, initDb, insertUiAudit, pruneAudit } from './storage/db';
 import { MiniGitPanel } from './panel/MiniGitPanel';
 import { SettingsPanel } from './panel/SettingsPanel';
 import { SpendGuardPanel } from './panel/SpendGuardPanel';
@@ -10,6 +11,13 @@ import { WebviewHost } from './panel/webview-host';
 let instance: Context | undefined;
 
 export async function activate(ext: vscode.ExtensionContext): Promise<void> {
+  // Before the context, so the first request of the session is auditable.
+  await initDb(ext.extensionPath);
+  const days = vscode.workspace.getConfiguration('copilot-adapter-kit')
+    .get<number>('audit.retentionDays', 30);
+  if (days > 0) pruneAudit(days);
+  insertUiAudit({ event_type: 'extension.activate', module: 'core', action: ext.extension.packageJSON.version });
+
   const ctx = await Context.bootstrap(ext);
   instance = ctx;
 
@@ -74,6 +82,7 @@ export async function activate(ext: vscode.ExtensionContext): Promise<void> {
 export async function deactivate(): Promise<void> {
   await instance?.bridge.signal();
   instance = undefined;
+  closeDb();
 }
 
 async function _promptKey(ctx: Context): Promise<void> {

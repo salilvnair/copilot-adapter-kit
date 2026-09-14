@@ -12,16 +12,18 @@ import { CommandPalette } from './CommandPalette';
 import { Keys } from './screens/Keys';
 import { Models } from './screens/Models';
 import { Providers } from './screens/Providers';
+import { AuditLog } from './screens/AuditLog';
 import { Configuration } from './screens/Configuration';
 import { GitTools } from './screens/GitTools';
 import { SpendGuard } from './screens/SpendGuard';
 import { Bin, Danger, DevTools, Dumps, JsonSettings } from './screens/Workspace';
 import { actions, liveProviders, useAppState, type AppState } from './state';
+import { onThemeMode, setThemeMode, themeMode, type ThemeMode } from '../vscode';
 
 export type Route =
   | 'providers' | 'models' | 'keys'
   | 'guard'
-  | 'config' | 'git' | 'json' | 'dumps' | 'dev'
+  | 'config' | 'git' | 'json' | 'dumps' | 'audit' | 'dev'
   | 'bin' | 'danger';
 
 export function Shell() {
@@ -90,7 +92,7 @@ function TopBar({ state, onSearch }: { state: AppState; onSearch: () => void }) 
             {b.caps.enforce ? `Guard ${pct ?? 0}%` : 'UNCAPPED'}
           </Chip>
         )}
-        <IconBtn icon={<I.Sun size={14} />} label="Follows the editor theme" ghost />
+        <ThemeToggle />
         <Menu
           label="More"
           align="right"
@@ -119,6 +121,30 @@ function TopBar({ state, onSearch }: { state: AppState; onSearch: () => void }) 
         />
       </span>
     </div>
+  );
+}
+
+/** Auto → Light → Dark. Auto follows the editor, which is the default. */
+function ThemeToggle() {
+  const [mode, setMode] = useState<ThemeMode>(themeMode);
+
+  useEffect(() => onThemeMode(setMode), []);
+
+  const next: Record<ThemeMode, ThemeMode> = { auto: 'light', light: 'dark', dark: 'auto' };
+  const icon = mode === 'light' ? <I.Sun size={14} />
+    : mode === 'dark' ? <I.Moon size={14} />
+      : <I.Auto size={14} />;
+  const label = mode === 'auto' ? 'Theme: following the editor'
+    : mode === 'light' ? 'Theme: light' : 'Theme: dark';
+
+  return (
+    <IconBtn
+      icon={icon}
+      label={`${label} — click for ${next[mode]}`}
+      ghost
+      on={mode !== 'auto'}
+      onClick={() => setThemeMode(next[mode])}
+    />
   );
 }
 
@@ -162,6 +188,7 @@ function Rail({ state, route, go }: { state: AppState; route: Route; go: (r: Rou
       {item('git', <I.Branch size={15} />, 'Git Tools')}
       {item('json', <I.Braces size={15} />, 'JSON Settings')}
       {item('dumps', <I.Folder size={15} />, 'Request Dumps')}
+      {item('audit', <I.Chart size={15} />, 'Audit Log', _auditCount(state))}
       {item('dev', <I.Braces size={15} />, 'Dev Tools')}
 
       <div className="rail-foot">
@@ -178,6 +205,12 @@ function Rail({ state, route, go }: { state: AppState; route: Route; go: (r: Rou
       </div>
     </nav>
   );
+}
+
+function _auditCount(state: AppState): number | undefined {
+  const a = state.audit;
+  if (!a?.ok) return undefined;
+  return a.counts.ai + a.counts.ui;
 }
 
 function _binCount(state: AppState): number {
@@ -206,6 +239,8 @@ function Screen({ state, route, go }: { state: AppState; route: Route; go: (r: R
       return <JsonSettings state={state} />;
     case 'dumps':
       return <Dumps state={state} />;
+    case 'audit':
+      return <AuditLog state={state} />;
     case 'dev':
       return <DevTools state={state} />;
     case 'bin':

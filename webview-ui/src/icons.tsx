@@ -209,6 +209,14 @@ export const Sun = svg(
     <path d="M12 2v3M12 19v3M4.2 4.2 6.3 6.3M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8 6.3 17.7M17.7 6.3l2.1-2.1" />
   </>,
 );
+export const Moon = svg(<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />, 1.9);
+export const Auto = svg(
+  <>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor" stroke="none" />
+  </>,
+  1.9,
+);
 export const Gear = svg(
   <>
     <circle cx="12" cy="12" r="3" />

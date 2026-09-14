@@ -35,5 +35,9 @@
   "copilot-adapter-kit.config.budget.maxInputTokensPerRequest": "Reject any single request whose estimated input exceeds this many tokens. `0` disables the check.",
   "copilot-adapter-kit.config.budget.maxOutputTokens": "Hard ceiling on `max_tokens` for every request. `0` uses the model’s declared max output (never unlimited).",
   "copilot-adapter-kit.config.budget.maxTurnsPerConversation": "Agent loop guard — maximum requests for one conversation before further turns are refused. `0` disables the guard.",
-  "copilot-adapter-kit.command.openHarness": "Copilot Adapter Kit: Open UI Parity Harness"
+  "copilot-adapter-kit.command.openHarness": "Copilot Adapter Kit: Open UI Parity Harness",
+  "copilot-adapter-kit.config.audit.enabled": "Record one row per model call in a local SQLite database — what was sent, what came back, how long it took and what it cost.",
+  "copilot-adapter-kit.config.audit.recordBodies": "**Also record prompts and responses.** Off by default: for this extension the payload is your source code, and an audit file holding it is a different proposition to one holding timings and token counts. Bodies are clipped to 8,000 characters. Keys are never recorded either way.",
+  "copilot-adapter-kit.config.audit.retentionDays": "Delete audit rows older than this many days, at startup. `0` keeps everything.",
+  "copilot-adapter-kit.config.audit.dbPath": "Where the database lives. Empty uses `~/.salilvnair/copilot-adapter-kit/db/cak.db`."
 }

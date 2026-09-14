@@ -193,6 +193,27 @@
           "minimum": 0,
           "markdownDescription": "%copilot-adapter-kit.config.budget.maxTurnsPerConversation%"
         },
+        "copilot-adapter-kit.audit.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%copilot-adapter-kit.config.audit.enabled%"
+        },
+        "copilot-adapter-kit.audit.recordBodies": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%copilot-adapter-kit.config.audit.recordBodies%"
+        },
+        "copilot-adapter-kit.audit.retentionDays": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0,
+          "markdownDescription": "%copilot-adapter-kit.config.audit.retentionDays%"
+        },
+        "copilot-adapter-kit.audit.dbPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "%copilot-adapter-kit.config.audit.dbPath%"
+        },
         "copilot-adapter-kit.maxTokens": {
           "type": "number",
           "default": 0,
@@ -323,11 +344,12 @@
   },
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('out',{recursive:true,force:true})\"",
-    "compile": "npm run clean && npm run build:webview && tsc -p ./",
-    "watch": "npm run clean && npm run build:webview && tsc -watch -p ./",
+    "compile": "npm run clean && npm run build:webview && npm run copy:wasm && tsc -p ./",
+    "watch": "npm run clean && npm run build:webview && npm run copy:wasm && tsc -watch -p ./",
     "install:webview": "npm --prefix webview-ui install",
     "build:webview": "npm --prefix webview-ui run build",
     "watch:webview": "npm --prefix webview-ui run dev",
+    "copy:wasm": "node -e \"require('node:fs').copyFileSync(require.resolve('sql.js/dist/sql-wasm.wasm'),'media/sql-wasm.wasm')\"",
     "typecheck": "tsc --noEmit -p ./ && npm --prefix webview-ui run typecheck",
     "test": "npm run compile && node test/run.js",
     "test:e2e": "npm --prefix webview-ui run test:e2e",
@@ -341,6 +363,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
+    "@types/sql.js": "^1.4.11",
     "@types/vscode": "^1.116.0",
     "@vscode/vsce": "^3.9.1",
     "svg2ttf": "^6.1.0",
@@ -350,6 +373,7 @@
   },
   "dependencies": {
     "highlight.js": "^11.11.1",
-    "marked": "^18.0.5"
+    "marked": "^18.0.5",
+    "sql.js": "^1.14.2"
   }
 }

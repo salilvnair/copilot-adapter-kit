@@ -197,6 +197,26 @@ When you see "tool list is unstable" warnings, enable `stabilizeTools` in the Co
 
 ---
 
+## Audit log
+
+Every model call is recorded to a local SQLite database — sql.js compiled to WASM, so there
+is no native build step and it runs the same everywhere. One row per call: which model
+answered, how many tokens each way, what it cost, how long it took, and the reason if the
+Spend Guard refused it. Panel actions are recorded alongside them.
+
+| Setting | Default | |
+|---|---|---|
+| `audit.enabled` | `true` | Record calls at all |
+| `audit.recordBodies` | **`false`** | Also record prompts and responses |
+| `audit.retentionDays` | `30` | Prune older rows at startup; `0` keeps everything |
+| `audit.dbPath` | `~/.salilvnair/copilot-adapter-kit/db/cak.db` | Where it lives |
+
+**Bodies are off by default and that is deliberate.** For this extension the payload is your
+source code and your prompts, so an audit file holding it is a different proposition to one
+holding timings and token counts. Keys are never recorded either way, and neither are
+request headers — only the API path. If SQLite fails to start, the extension carries on and
+the screen says so.
+
 ## Screens
 
 Every screen, tab and overlay is captured in [`docs/screenshots/`](docs/screenshots) —
@@ -216,7 +236,7 @@ behaviour-heavy widgets. Three entries build into `media/dist/`, one per surface
 | `npm run watch:webview` | Vite dev server with hot reload, for working on a screen |
 | `npm run compile` | Webview build + `tsc` — what F5 and packaging use |
 | `npm run typecheck` | Type-checks the extension and the webview |
-| `npm test` | Compiles, then runs the spend-guard, webview-host and message-contract suites |
+| `npm test` | Compiles, then runs the spend-guard, webview-host, message-contract and audit-database suites |
 | `npm run test:e2e` | Playwright drives every screen in a real browser |
 | `npm run test:all` | Both of the above |
 

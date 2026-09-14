@@ -110,6 +110,12 @@ async function capturePanel(browser) {
   await snap('json-settings');
   await go('Request Dumps');
   await snap('request-dumps');
+  await go('Audit Log');
+  await snap('audit-log');
+  await page.locator('.audit-row').filter({ hasText: 'REFUSED' }).first().click();
+  await page.waitForTimeout(350);
+  await snap('audit-log-expanded');
+
   await go('Dev Tools');
   await snap('dev-tools');
   await go('Bin');
