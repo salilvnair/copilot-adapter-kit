@@ -58,6 +58,7 @@ export const FIXTURE: AppState = {
   ],
   maxTokens: 0,
   logLevel: 'meta',
+  probeIntervalMinutes: 5,
   budget: {
     caps: {
       enforce: true,

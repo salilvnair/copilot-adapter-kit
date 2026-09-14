@@ -311,6 +311,7 @@ export class SettingsPanel {
         // hard-coded in the markup and read "v0.1" three releases late.
         version: this.ext.extension.packageJSON.version as string,
         health: this.ctx?.health.all ?? {},
+        probeIntervalMinutes: config.get<number>('health.probeIntervalMinutes', 5),
         audit: _auditSnapshot(),
         builtinModels, copilotModels,
         engineFamilies: KNOWN_FAMILIES.map(f => ({ family: f.family, label: f.label, defaultUrl: f.defaultUrl, desc: f.desc })),
@@ -358,11 +359,13 @@ export class SettingsPanel {
       .get<Record<string, any>>('providers') || {};
 
     if (uuid) {
+      // An explicit Test always asks — that is what the button is for.
       const p = providers[uuid];
       if (p?.baseUrl) await this.ctx.health.probe(uuid, p.baseUrl);
     } else {
+      // Opening the panel reuses an answer that is still inside the interval.
       await Promise.all([
-        this.ctx.health.probeAll(providers),
+        this.ctx.health.probeAll(providers, true),
         Object.keys(providers).length === 0 ? this.ctx.health.probeOllama() : Promise.resolve(),
       ]);
     }

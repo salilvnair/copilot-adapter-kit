@@ -15,6 +15,24 @@ import vscode from 'vscode';
 const STORE_KEY = 'cak.health.v1';
 const PROBE_TIMEOUT_MS = 4000;
 
+/** Minutes a reachability answer is reused for, when the caller allows it. */
+const DEFAULT_PROBE_INTERVAL_MIN = 5;
+
+/**
+ * How long an answer stays good.
+ *
+ * Opening the panel used to re-probe every provider unconditionally, so
+ * flicking between screens hit every configured endpoint again. The probe is
+ * unauthenticated and free, but it is still a request to someone else's
+ * service and still counts against their rate limit. Configurable, because
+ * five minutes is a guess and a local Ollama is not a hosted API.
+ */
+export function probeFreshForMs(): number {
+  const mins = vscode.workspace.getConfiguration('copilot-adapter-kit')
+    .get<number>('health.probeIntervalMinutes', DEFAULT_PROBE_INTERVAL_MIN);
+  return Math.max(0, Number(mins) || 0) * 60_000;
+}
+
 export interface HealthRecord {
   /** The endpoint answered at all — any HTTP status, 401 included. */
   reachable: boolean;
@@ -59,7 +77,14 @@ export class ProviderHealth {
    * Probe an endpoint without a key. Any HTTP answer counts as reachable; only
    * a transport failure or a timeout counts as down.
    */
-  async probe(uuid: string, baseUrl: string): Promise<HealthRecord> {
+  async probe(uuid: string, baseUrl: string, allowCached = false): Promise<HealthRecord> {
+    // Test passes nothing and always asks; the panel opening allows a reuse.
+    if (allowCached) {
+      const fresh = probeFreshForMs();
+      const prev = this.records[uuid];
+      if (fresh > 0 && prev?.checkedAt && Date.now() - prev.checkedAt < fresh) return prev;
+    }
+
     const url = `${baseUrl.replace(/\/$/, '')}/models`;
     const started = Date.now();
     const ctrl = new AbortController();
@@ -83,11 +108,14 @@ export class ProviderHealth {
   }
 
   /** Probe every provider that has a base URL. */
-  async probeAll(providers: Record<string, { baseUrl?: string; _deleted?: boolean }>): Promise<void> {
+  async probeAll(
+    providers: Record<string, { baseUrl?: string; _deleted?: boolean }>,
+    allowCached = false,
+  ): Promise<void> {
     await Promise.all(
       Object.entries(providers)
         .filter(([, p]) => p && !p._deleted && p.baseUrl)
-        .map(([uuid, p]) => this.probe(uuid, p.baseUrl!)),
+        .map(([uuid, p]) => this.probe(uuid, p.baseUrl!, allowCached)),
     );
   }
 

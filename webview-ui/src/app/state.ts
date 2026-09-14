@@ -142,6 +142,8 @@ export interface AppState {
   audit?: AuditSnapshot;
   maxTokens: number;
   logLevel: string;
+  /** Minutes a reachability answer is reused before the endpoint is asked again. */
+  probeIntervalMinutes: number;
   stabilizeTools?: boolean;
   maxDiffFiles?: number;
   systemPrompt?: string;
@@ -163,6 +165,7 @@ const EMPTY: AppState = {
   engineFamilies: [],
   maxTokens: 0,
   logLevel: 'quiet',
+  probeIntervalMinutes: 5,
   usageByModel: {},
 };
 

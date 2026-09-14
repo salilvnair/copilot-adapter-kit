@@ -93,7 +93,9 @@ export function Providers({ state, go }: { state: AppState; go: (r: Route) => vo
 
         <div style={{ fontSize: 11, color: 'var(--c-muted)', display: 'flex', gap: 7, alignItems: 'center' }}>
           <I.Info size={12} />
-          Reachability checked when the panel opens, then hourly. Never with your key attached.
+          Reachability checked when this panel opens{state.probeIntervalMinutes > 0
+            ? `, at most once every ${state.probeIntervalMinutes} minute${state.probeIntervalMinutes === 1 ? '' : 's'}`
+            : ''}, and whenever you press Test. Never with your key attached.
         </div>
       </div>
   );

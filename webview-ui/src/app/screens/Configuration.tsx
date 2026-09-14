@@ -50,8 +50,35 @@ function General({ state }: { state: AppState }) {
   const set = (key: string, value: unknown) => actions.saveConfig(key, value);
   const guardCap = state.budget?.caps.maxOutputTokens || 0;
 
+  const probeMins = state.probeIntervalMinutes ?? 5;
+
   return (
     <>
+      <SectionTitle>Connections</SectionTitle>
+      <div>
+        <SettingRow
+          name="Reachability check interval"
+          modified={probeMins !== 5}
+          desc={probeMins > 0
+            ? <>A provider&rsquo;s status is reused for this long before the endpoint is asked
+                again. The probe is a <span className="mono">GET /models</span> with no key
+                attached, so it costs nothing &mdash; but it is still a request to someone
+                else&rsquo;s service. <b>Test</b> always asks, whatever this says.</>
+            : <>Every provider is probed each time the panel opens.</>}
+        >
+          <Stepper
+            label="Reachability check interval"
+            value={probeMins > 0 ? `${probeMins} min` : 'every open'}
+            num={probeMins}
+            onSet={n => set('health.probeIntervalMinutes', Math.max(0, n))}
+            format={n => (n > 0 ? `${n} min` : 'every open')}
+            parse={t => parseInt(t, 10)}
+            onDec={() => set('health.probeIntervalMinutes', Math.max(0, probeMins - 5))}
+            onInc={() => set('health.probeIntervalMinutes', probeMins + 5)}
+          />
+        </SettingRow>
+      </div>
+
       <SectionTitle>Requests</SectionTitle>
       <div>
         <SettingRow

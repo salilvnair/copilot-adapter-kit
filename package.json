@@ -3,7 +3,7 @@
   "displayName": "Copilot Adapter Kit",
   "description": "Plugin-based provider mesh for Copilot Chat. BYOK, zero config.",
   "icon": "resources/icon.png",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "publisher": "salilvnair",
   "license": "MIT",
   "author": "salilvnair",
@@ -207,6 +207,12 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "%copilot-adapter-kit.config.audit.recordBodies%"
+        },
+        "copilot-adapter-kit.health.probeIntervalMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "markdownDescription": "%copilot-adapter-kit.config.health.probeIntervalMinutes%"
         },
         "copilot-adapter-kit.audit.retentionDays": {
           "type": "number",
