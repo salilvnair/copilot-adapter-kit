@@ -47,7 +47,8 @@
         {
           "type": "webview",
           "id": "cak.miniGitPanel",
-          "name": "Git AI"
+          "name": "Git AI",
+          "icon": "$(cak-icon)"
         }
       ]
     },
