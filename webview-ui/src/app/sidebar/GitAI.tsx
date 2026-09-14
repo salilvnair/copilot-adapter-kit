@@ -52,6 +52,15 @@ export function GitAI() {
   const [scope, setScope] = useState<'staged' | 'all'>('staged');
   const [gen, setGen] = useState<Gen>({ phase: 'idle' });
 
+  /* One call for both buttons. Regenerate used to post `{ regenerate: true }`
+     and nothing else — the host reads `message` and `scope`, so it discarded
+     the guidance you had typed and the scope you had picked, then generated
+     from the defaults as if you had asked for neither. */
+  const generate = () => {
+    setGen({ phase: 'running', text: '', startedAt: Date.now() });
+    post('generate', { message: msg, scope });
+  };
+
   useEffect(() => {
     const off = onMessage(m => {
       if (m.type === 'gitState') setS(m.payload as GitState);
@@ -168,7 +177,7 @@ export function GitAI() {
         <div className="composer-row">
           <AiBtn
             icon={<I.Sparkle size={13} />}
-            onClick={() => { setGen({ phase: 'running', text: '', startedAt: Date.now() }); post('generate', { message: msg, scope }); }}
+            onClick={generate}
           >
             {gen.phase === 'running' ? 'Generating…' : 'Generate'}
           </AiBtn>
@@ -212,7 +221,9 @@ export function GitAI() {
         ))}
       </div>
 
-      {gen.phase !== 'idle' && <Message gen={gen} onClear={() => setGen({ phase: 'idle' })} />}
+      {gen.phase !== 'idle' && (
+        <Message gen={gen} onClear={() => setGen({ phase: 'idle' })} onRegenerate={generate} />
+      )}
 
       <Foot guard={s.guard} />
     </div>
@@ -245,7 +256,9 @@ function Title({ repo }: { repo?: string }) {
   );
 }
 
-function Message({ gen, onClear }: { gen: Gen; onClear: () => void }) {
+function Message({ gen, onClear, onRegenerate }: {
+  gen: Gen; onClear: () => void; onRegenerate: () => void;
+}) {
   if (gen.phase === 'error') {
     return (
       <div className="msg-card" style={{ borderColor: 'rgba(239,68,68,.4)' }}>
@@ -296,7 +309,7 @@ function Message({ gen, onClear }: { gen: Gen; onClear: () => void }) {
           </Btn>
           <IconBtn icon={<I.ArrowUp />} label="Commit and push" onClick={() => post('commit', { message: text, push: true })} />
           <IconBtn icon={<I.Copy />} label="Copy markdown" onClick={() => post('copy', { text })} />
-          <IconBtn icon={<I.Refresh />} label="Regenerate" onClick={() => post('generate', { regenerate: true })} />
+          <IconBtn icon={<I.Refresh />} label="Regenerate" onClick={onRegenerate} />
         </div>
       )}
     </div>

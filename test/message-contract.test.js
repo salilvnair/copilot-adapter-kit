@@ -87,6 +87,58 @@ check(
     : '',
 );
 
+console.log('\n=== the host reads the keys the panel sends ===');
+{
+  /*
+    A handler that agrees on the message name and disagrees on the payload is
+    invisible to every other check here. saveProvider sent "providerConfig"
+    while the host read "config", so every save threw a TypeError on undefined
+    and no provider was ever written — the panel looked like it worked.
+
+    Only object-literal payloads can be read statically; a variable is skipped,
+    as is a handler that takes msg.payload whole rather than by key.
+  */
+  const panelSrc = {};
+  for (const rel of PANELS) panelSrc[rel] = fs.readFileSync(path.join(ROOT, rel), 'utf-8');
+
+  const caseBody = (src, type) => {
+    const start = src.indexOf("case '" + type + "':");
+    if (start === -1) return undefined;
+    const end = src.indexOf('break;', start);
+    return src.slice(start, end === -1 ? start + 800 : end);
+  };
+
+  const missing = [];
+  for (const file of walk(WEBVIEW_SRC)) {
+    const text = fs.readFileSync(file, 'utf-8');
+    for (const m of text.matchAll(/\bpost\(\s*'([A-Za-z:]+)'\s*,\s*\{([^}]*)\}/g)) {
+      const type = m[1];
+      const keys = [...m[2].matchAll(/(?:^|,)\s*([A-Za-z_$][\w$]*)\s*[:,]/g)].map(k => k[1]);
+      if (!keys.length) continue;
+      for (const rel of PANELS) {
+        const block = caseBody(panelSrc[rel], type);
+        if (block === undefined) continue;
+        if (/msg\.payload\s*[),;]/.test(block)) continue;
+        for (const key of keys) {
+          // Plain containment, not a built regex: escaping '?.' through a
+          // template produced a pattern that matched nothing and flagged
+          // every key in the codebase.
+          const read = block.includes('payload?.' + key)
+            || block.includes('payload.' + key)
+            || block.includes("payload['" + key + "']");
+          if (!read) {
+            missing.push(type + '.' + key + '  <- sent by '
+              + path.relative(ROOT, file).split(path.sep).join('/')
+              + ', never read in ' + path.basename(rel));
+          }
+        }
+      }
+    }
+  }
+  check('every key the panel sends is read by its handler', missing.length === 0,
+    missing.join('\n          '));
+}
+
 console.log('\n=== every action helper is used ===');
 const stateSrc = fs.readFileSync(path.join(WEBVIEW_SRC, 'app', 'state.ts'), 'utf-8');
 const actionsBlock = stateSrc.slice(stateSrc.indexOf('export const actions'));

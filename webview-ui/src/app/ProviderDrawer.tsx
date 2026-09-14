@@ -35,9 +35,20 @@ export function AddProviderDrawer({
 
   const fam = state.engineFamilies.find(f => f.family === family);
 
-  // Picking a family fills the endpoint, unless the user has typed their own.
+  /*
+    Picking a family fills the endpoint, unless the user has typed their own.
+
+    This only filled an EMPTY field, so the first family's URL stuck: the drawer
+    opens on OpenAI and fills api.openai.com, then switching to DeepSeek left
+    that URL sitting there — pointing the new provider at the wrong service.
+    A URL that is still some family's default was put there by this effect, so
+    it is ours to replace; anything else is yours and is left alone.
+  */
+  const DEFAULTS = new Set(state.engineFamilies.map(f => f.defaultUrl).filter(Boolean));
   useEffect(() => {
-    if (!existing && fam?.defaultUrl) setBaseUrl(prev => (prev ? prev : fam.defaultUrl));
+    if (existing || !fam) return;
+    setBaseUrl(prev => (!prev || DEFAULTS.has(prev) ? fam.defaultUrl : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [family, fam, existing]);
 
   useEffect(() => {
@@ -48,13 +59,18 @@ export function AddProviderDrawer({
 
   const save = () => {
     if (!baseUrl.trim()) return;
-    actions.saveProvider(uuid ?? '', {
+    // A new provider gets its id here rather than on the host, so the key typed
+    // beside it has something to attach to. It used to be saved only when a
+    // uuid already existed, which meant the key was silently dropped every time
+    // a provider was added with one — the commonest way to add one at all.
+    const id = uuid || _uuid();
+    actions.saveProvider(id, {
       family,
       name: name.trim() || fam?.label || family,
       baseUrl: baseUrl.trim(),
       modelAlias: _parseAliases(aliases),
     });
-    if (apiKey.trim() && uuid) actions.setApiKey(uuid, apiKey.trim());
+    if (apiKey.trim()) actions.setApiKey(id, apiKey.trim());
     close();
   };
 
@@ -184,4 +200,12 @@ function _parseAliases(text: string): Record<string, string> {
     if (k?.trim() && v.length) out[k.trim()] = v.join('=').trim();
   }
   return out;
+}
+
+/** Same shape the host generates, so either side may mint one. */
+function _uuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
 }

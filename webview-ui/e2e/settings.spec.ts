@@ -4,7 +4,7 @@
  * control is clicked, does anything actually happen? */
 
 import { expect, test } from '@playwright/test';
-import { clearPosts, goTo, postTypes, ready, recordPosts } from './helpers';
+import { clearPosts, goTo, postTypes, posts, ready, recordPosts } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await recordPosts(page);
@@ -110,6 +110,66 @@ test.describe('Providers', () => {
     await goTo(page, 'Providers');
     await page.getByRole('button', { name: 'Add provider' }).click();
     await expect(page.getByLabel('Base URL')).toHaveValue(/^https:\/\//);
+  });
+
+  test('switching family switches the endpoint with it', async ({ page }) => {
+    // The drawer opens on the first family and fills its URL. Changing family
+    // left that URL behind, pointing the new provider at the wrong service.
+    await goTo(page, 'Providers');
+    await page.getByRole('button', { name: 'Add provider' }).click();
+    const url = page.getByLabel('Base URL');
+    await expect(url).toHaveValue('https://api.openai.com/v1');
+
+    await page.getByTestId('provider-family').click();
+    await page.getByRole('option', { name: 'DeepSeek' }).click();
+    await expect(url).toHaveValue('https://api.deepseek.com/v1');
+
+    await page.getByTestId('provider-family').click();
+    await page.getByRole('option', { name: 'Groq' }).click();
+    await expect(url).toHaveValue('https://api.groq.com/openai/v1');
+  });
+
+  test('a URL you typed yourself is not overwritten', async ({ page }) => {
+    await goTo(page, 'Providers');
+    await page.getByRole('button', { name: 'Add provider' }).click();
+    const url = page.getByLabel('Base URL');
+    await url.fill('https://gateway.internal/v1');
+
+    await page.getByTestId('provider-family').click();
+    await page.getByRole('option', { name: 'DeepSeek' }).click();
+    await expect(url).toHaveValue('https://gateway.internal/v1');
+  });
+
+  test('saving sends the config under the key the host reads', async ({ page }) => {
+    // The host read `config` while this sent `providerConfig`, so every save
+    // threw on undefined and no provider was ever written.
+    await goTo(page, 'Providers');
+    await page.getByRole('button', { name: 'Add provider' }).click();
+    await page.getByLabel('Provider name').fill('My DeepSeek');
+    await clearPosts(page);
+    await page.getByRole('button', { name: 'Save provider' }).click();
+
+    const saved = (await posts(page)).find(m => m.type === 'saveProvider');
+    expect(saved, 'nothing was posted').toBeTruthy();
+    const payload = saved!.payload as { uuid?: string; providerConfig?: Record<string, unknown> };
+    expect(payload.providerConfig).toBeTruthy();
+    expect(payload.providerConfig!.baseUrl).toBe('https://api.openai.com/v1');
+    expect(payload.uuid, 'a new provider needs an id so its key can attach').toBeTruthy();
+  });
+
+  test('a key typed while adding a provider is stored against it', async ({ page }) => {
+    await goTo(page, 'Providers');
+    await page.getByRole('button', { name: 'Add provider' }).click();
+    await page.getByLabel('API key').fill('sk-test-000');
+    await clearPosts(page);
+    await page.getByRole('button', { name: 'Save provider' }).click();
+
+    const all = await posts(page);
+    const saved = all.find(m => m.type === 'saveProvider');
+    const key = all.find(m => m.type === 'setApiKey');
+    expect(key, 'the key was dropped because the provider had no id yet').toBeTruthy();
+    expect((key!.payload as { uuid: string }).uuid)
+      .toBe((saved!.payload as { uuid: string }).uuid);
   });
 });
 

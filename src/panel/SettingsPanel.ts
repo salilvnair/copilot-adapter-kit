@@ -98,7 +98,7 @@ export class SettingsPanel {
           await this._saveConfig(msg.payload?.key, msg.payload?.value);
           break;
         case 'saveProvider':
-          await this._saveProvider(msg.payload?.uuid, msg.payload?.config);
+          await this._saveProvider(msg.payload?.uuid, msg.payload?.providerConfig);
           break;
         case 'duplicateProvider':
           await this._duplicateProvider(msg.payload?.uuid);
@@ -421,6 +421,15 @@ export class SettingsPanel {
   // ---- provider CRUD ----
 
   private async _saveProvider(uuid: string, providerConfig: any): Promise<void> {
+    // This read `msg.payload?.config` while the panel sends `providerConfig`,
+    // so every save threw "Cannot read properties of undefined (reading
+    // 'family')" and nothing was ever written. Saying so beats a TypeError.
+    if (!providerConfig || typeof providerConfig !== 'object') {
+      void vscode.window.showErrorMessage(
+        'Copilot Adapter Kit: the provider could not be saved — no configuration was received.',
+      );
+      return;
+    }
     const config = vscode.workspace.getConfiguration('copilot-adapter-kit');
     const providers = { ...(config.get<Record<string, any>>('providers') || {}) };
     const key = uuid || this._uuid();
