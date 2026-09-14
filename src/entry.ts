@@ -2,6 +2,7 @@
 import vscode from 'vscode';
 import { fmtTokens, type BudgetStatus } from './kernel/budget';
 import { Context } from './kernel/context';
+import { paintStatus } from './panel/status-bar';
 import { closeDb, initDb, insertUiAudit, pruneAudit } from './storage/db';
 import { MiniGitPanel } from './panel/MiniGitPanel';
 import { SettingsPanel } from './panel/SettingsPanel';
@@ -24,7 +25,7 @@ export async function activate(ext: vscode.ExtensionContext): Promise<void> {
   // Status bar entry — live spend readout, click to open usage
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   status.command = 'copilot-adapter-kit.showUsage';
-  const paint = (s: BudgetStatus) => _paintStatus(status, s);
+  const paint = (s: BudgetStatus) => paintStatus(status, s);
   paint(ctx.budget.status());
   status.show();
   ext.subscriptions.push(status, ctx.budget.onChange(paint));
@@ -469,51 +470,6 @@ async function _generateCommitMessage(ext: vscode.ExtensionContext, ctx: Context
 
 // ---- Spend guard: status bar, usage report, override ----
 
-function _paintStatus(item: vscode.StatusBarItem, s: BudgetStatus): void {
-  const used = s.day.inputTokens + s.day.outputTokens;
-  const cost = s.day.costUsd > 0 ? ` · $${s.day.costUsd.toFixed(2)}` : '';
-
-  if (!s.caps.enforce) {
-    // Loud and permanent: no cap is in force.
-    item.text = `$(cak-icon) $(alert) UNCAPPED ${fmtTokens(used)}${cost}`;
-    item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
-    item.tooltip = _tooltip(s, 'SPEND GUARD OFF — requests are unlimited. Click for details.');
-    return;
-  }
-
-  item.text = `$(cak-icon) ${fmtTokens(used)}${cost}`;
-  item.backgroundColor = s.overLimit
-    ? new vscode.ThemeColor('statusBarItem.errorBackground')
-    : s.nearLimit
-      ? new vscode.ThemeColor('statusBarItem.warningBackground')
-      : undefined;
-  item.tooltip = _tooltip(s, s.overLimit
-    ? 'Daily budget reached — further requests are blocked.'
-    : 'Copilot Adapter Kit — usage today. Click for details.');
-}
-
-function _tooltip(s: BudgetStatus, head: string): vscode.MarkdownString {
-  const used = s.day.inputTokens + s.day.outputTokens;
-  const tokens = s.caps.dailyTokenLimit > 0
-    ? `${fmtTokens(used)} / ${fmtTokens(s.caps.dailyTokenLimit)} (${Math.round(s.tokenPct)}%)`
-    : `${fmtTokens(used)} (no limit)`;
-  const cost = s.caps.dailyCostLimitUsd > 0
-    ? `$${s.day.costUsd.toFixed(2)} / $${s.caps.dailyCostLimitUsd.toFixed(2)}`
-    : `$${s.day.costUsd.toFixed(2)} (no limit)`;
-
-  const md = new vscode.MarkdownString();
-  md.appendMarkdown(`**${head}**\n\n`);
-  md.appendMarkdown(`Today (${s.day.day})\n\n`);
-  md.appendMarkdown(`- Tokens: ${tokens}\n`);
-  md.appendMarkdown(`- Cost: ${cost}\n`);
-  md.appendMarkdown(`- Requests: ${s.day.requests}${s.day.blocked ? ` · ${s.day.blocked} blocked` : ''}\n`);
-  if (s.day.estimated) {
-    md.appendMarkdown('\n_Some figures are estimates — that provider reported no usage data._\n');
-  }
-  return md;
-}
-
-/** Kept for the notification's View Usage action, which cannot open a panel. */
 async function _showUsage(ctx: Context): Promise<void> {
   const s = ctx.budget.status();
   const used = s.day.inputTokens + s.day.outputTokens;
